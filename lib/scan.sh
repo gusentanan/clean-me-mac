@@ -72,6 +72,7 @@ EOF
   for p in "${_excluded_caches[@]}";     do exc_cache_args+=("$p"); done
 
   # Collect rows: "category\tpath\tbytes"
+  spinner_start
   local rows=""
   local cat_name rest_pipe p sz
   while IFS='|' read -r cat_name rest_pipe; do
@@ -95,6 +96,7 @@ EOF
       rows+="${cat_name}"$'\t'"${p}"$'\t'"${sz}"$'\n'
     done
   done < <(_scan_categories)
+  spinner_stop
 
   if [[ "$CMM_JSON" -eq 1 ]]; then
     _scan_json "$rows"
@@ -122,11 +124,14 @@ _scan_table() {
   local grand=0 cat bytes
   while IFS=$'\t' read -r cat bytes; do
     [[ -z "$cat" || "$bytes" == "" ]] && continue
-    printf '%-22s %12s\n' "$cat" "$(human_size "$bytes")"
+    printf '%-22s %s\n' "$cat" "$(human_size_padded "$bytes" 12)"
     grand=$(( grand + bytes ))
   done <<< "$totals"
   printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..40})" "$C_RESET"
-  printf '%s%-22s %12s%s\n\n' "$C_BOLD" "TOTAL" "$(human_size "$grand")" "$C_RESET"
+  printf '%s%-22s %s%s\n\n' \
+    "$C_BOLD" "TOTAL" \
+    "$(printf '%s%12s%s' "$C_BOLD$C_MAGENTA" "$(human_size "$grand")" "$C_RESET")" \
+    "$C_RESET"
 
   # Detail listing, sorted by bytes desc within each category.
   printf '%s%sTop items%s\n\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
@@ -141,7 +146,9 @@ _scan_table() {
       # Skip rows under 10 MB in table view to reduce noise.
       if (( bytes < 10 * 1024 * 1024 )); then continue; fi
       local short=${path/#$HOME/\~}
-      printf '%-22s %12s  %s\n' "$cat" "$(human_size "$bytes")" "$short"
+      printf '%-22s %s  %s%s%s\n' \
+        "$cat" "$(human_size_padded "$bytes" 12)" \
+        "$C_DIM" "$short" "$C_RESET"
     done
   echo
 }

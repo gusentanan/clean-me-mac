@@ -24,71 +24,103 @@ cmd_doctor() {
 }
 
 _doctor_disk() {
-  printf '\n%sDisk%s\n' "$C_BOLD" "$C_RESET"
-  # Pull APFS data volume stats.
-  local line capacity used
-  line=$(diskutil apfs list 2>/dev/null \
-    | awk '/Capacity Ceiling/ { ceil=$NF; gsub("[()]","",ceil) } /Capacity In Use By Volumes/ { used=$NF; gsub("[()]","",used) } END { printf "%s %s", ceil, used }')
+  printf '\n%s%sDisk%s\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
 
-  if [[ -n "$line" ]]; then
-    echo "  Container:    $(diskutil apfs list 2>/dev/null | awk '/Size \(Capacity Ceiling\)/ {print $5, $6; exit}')"
-    echo "  In use:       $(diskutil apfs list 2>/dev/null | awk '/Capacity In Use By Volumes/ {print $7, $8; exit}')"
-    echo "  Not allocated:$(diskutil apfs list 2>/dev/null | awk '/Capacity Not Allocated/ {print $5, $6; exit}')"
+  # Parse APFS container stats — first container only (boot disk).
+  local apfs cap used free pct
+  apfs=$(diskutil apfs list 2>/dev/null)
+  cap=$(awk  '/Size \(Capacity Ceiling\)/ { print $5; exit }'        <<< "$apfs")
+  used=$(awk '/Capacity In Use By Volumes/ { print $7; exit }'       <<< "$apfs")
+  free=$(awk '/Capacity Not Allocated/      { print $5; exit }'      <<< "$apfs")
+
+  if [[ -n "$cap" && -n "$used" ]]; then
+    pct=$(awk -v u="$used" -v c="$cap" 'BEGIN { printf "%.0f", (u/c)*100 }')
+    local pct_color="$C_GREEN"
+    (( pct >= 70 )) && pct_color="$C_YELLOW"
+    (( pct >= 85 )) && pct_color="$C_RED$C_BOLD"
+    printf '  %-14s %s\n'      "Capacity:"     "$(human_size_c "$cap")"
+    printf '  %-14s %s  %s(%s%%)%s\n' "In use:"  "$(human_size_c "$used")" "$pct_color" "$pct" "$C_RESET"
+    printf '  %-14s %s\n'      "Free:"         "$(human_size_c "$free")"
   else
     df -h / | awk 'NR==2 { printf "  Root: %s used of %s (%s)\n", $3, $2, $5 }'
   fi
 }
 
 _doctor_top_home() {
-  printf '\n%sTop 10 dirs in $HOME (excluding Library):%s\n' "$C_BOLD" "$C_RESET"
-  local d sz
-  {
-    # Visible top-level dirs.
-    for d in "$HOME"/*; do
-      [[ -d "$d" ]] || continue
-      [[ "$(basename "$d")" == "Library" ]] && continue
-      sz=$(dir_size "$d")
-      printf '%d\t%s\n' "$sz" "$d"
-    done
-    # Hidden top-level dirs.
-    for d in "$HOME"/.*; do
-      [[ -d "$d" ]] || continue
-      local n
-      n=$(basename "$d")
-      [[ "$n" == "." || "$n" == ".." ]] && continue
-      sz=$(dir_size "$d")
-      printf '%d\t%s\n' "$sz" "$d"
-    done
-  } | sort -t$'\t' -k1 -nr | head -10 \
-    | while IFS=$'\t' read -r sz path; do
-        printf '  %10s  %s\n' "$(human_size "$sz")" "${path/#$HOME/\~}"
+  printf '\n%s%sTop 10 dirs in $HOME%s %s(excluding Library)%s\n' \
+    "$C_BOLD" "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
+  spinner_start
+  local out
+  out=$(
+    {
+      # Visible top-level dirs.
+      for d in "$HOME"/*; do
+        [[ -d "$d" ]] || continue
+        [[ "$(basename "$d")" == "Library" ]] && continue
+        sz=$(dir_size "$d")
+        printf '%d\t%s\n' "$sz" "$d"
       done
+      # Hidden top-level dirs.
+      for d in "$HOME"/.*; do
+        [[ -d "$d" ]] || continue
+        n=$(basename "$d")
+        [[ "$n" == "." || "$n" == ".." ]] && continue
+        sz=$(dir_size "$d")
+        printf '%d\t%s\n' "$sz" "$d"
+      done
+    } | sort -t$'\t' -k1 -nr | head -10 \
+      | while IFS=$'\t' read -r sz path; do
+          printf '  %s  %s\n' "$(human_size_padded "$sz" 10)" "${path/#$HOME/\~}"
+        done
+  )
+  spinner_stop
+  printf '%s\n' "$out"
 }
 
 _doctor_orphans() {
-  printf '\n%sOrphans:%s ' "$C_BOLD" "$C_RESET"
-  # Source orphans lazily.
+  printf '\n%s%sOrphans:%s ' "$C_BOLD" "$C_BLUE" "$C_RESET"
   source "$CMM_LIB/orphans.sh"
-  CMM_JSON=0 cmd_orphans --count-only
+  spinner_start
+  local out
+  out=$(cmd_orphans --count-only 2>/dev/null)
+  spinner_stop
+  # Colorize: highlight the numeric count and reclaimable size.
+  # Format: "N orphans, SIZE reclaimable"
+  if [[ "$out" =~ ^([0-9]+)\ orphans,\ (.+)\ reclaimable$ ]]; then
+    local n=${BASH_REMATCH[1]} sz=${BASH_REMATCH[2]}
+    local n_color="$C_GREEN"
+    (( n > 0 )) && n_color="$C_YELLOW$C_BOLD"
+    printf '%s%s%s orphans, %s%s%s reclaimable\n' \
+      "$n_color" "$n" "$C_RESET" "$C_YELLOW$C_BOLD" "$sz" "$C_RESET"
+  else
+    printf '%s\n' "$out"
+  fi
 }
 
 _doctor_top_presets() {
-  printf '\n%sTop 5 cleanable presets (current size):%s\n' "$C_BOLD" "$C_RESET"
+  printf '\n%s%sTop 5 cleanable presets%s %s(current size)%s\n' \
+    "$C_BOLD" "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
   source "$CMM_LIB/clean.sh"
-
-  local f sz line
-  local rows=""
-  while IFS= read -r f; do
-    _load_preset "$f"
-    sz=$(_preset_current_size)
-    rows+="${sz}"$'\t'"${PRESET_NAME}"$'\t'"${PRESET_DESC}"$'\n'
-  done < <(_list_preset_files)
-
-  printf '%s' "$rows" | sort -t$'\t' -k1 -nr | head -5 \
-    | while IFS=$'\t' read -r sz name desc; do
-        [[ -z "$name" ]] && continue
-        printf '  %10s  %-22s %s\n' "$(human_size "$sz")" "$name" "$desc"
-      done
+  spinner_start
+  local out
+  out=$(
+    local f sz rows=""
+    while IFS= read -r f; do
+      _load_preset "$f"
+      sz=$(_preset_current_size)
+      rows+="${sz}"$'\t'"${PRESET_NAME}"$'\t'"${PRESET_DESC}"$'\n'
+    done < <(_list_preset_files)
+    printf '%s' "$rows" | sort -t$'\t' -k1 -nr | head -5 \
+      | while IFS=$'\t' read -r sz name desc; do
+          [[ -z "$name" ]] && continue
+          printf '  %s  %s%-22s%s %s%s%s\n' \
+            "$(human_size_padded "$sz" 10)" \
+            "$C_CYAN" "$name" "$C_RESET" \
+            "$C_DIM" "$desc" "$C_RESET"
+        done
+  )
+  spinner_stop
+  printf '%s\n' "$out"
 }
 
 _doctor_help() {

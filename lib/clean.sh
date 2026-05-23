@@ -120,22 +120,31 @@ EOF
 _clean_list() {
   printf '\n%s%-22s %10s %-6s  %s%s\n' "$C_BOLD" "PRESET" "SIZE" "SAFE" "DESCRIPTION" "$C_RESET"
   printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..90})" "$C_RESET"
-  local f safe_label sz
-  while IFS= read -r f; do
-    _load_preset "$f"
-    sz=$(_preset_current_size)
-    if [[ "${PRESET_SAFE:-false}" == "true" ]]; then
-      safe_label="${C_GREEN}yes${C_RESET}"
-    else
-      safe_label="${C_YELLOW}care${C_RESET}"
-    fi
-    printf '%-22s %10s %b   %s\n' \
-      "$PRESET_NAME" "$(human_size "$sz")" "$safe_label" "$PRESET_DESC"
-  done < <(_list_preset_files)
-  echo
+  spinner_start
+  local out
+  out=$(
+    local f safe_label sz
+    while IFS= read -r f; do
+      _load_preset "$f"
+      sz=$(_preset_current_size)
+      if [[ "${PRESET_SAFE:-false}" == "true" ]]; then
+        safe_label="${C_GREEN}yes${C_RESET}"
+      else
+        safe_label="${C_YELLOW}care${C_RESET}"
+      fi
+      printf '%s%-22s%s %s %b   %s%s%s\n' \
+        "$C_CYAN" "$PRESET_NAME" "$C_RESET" \
+        "$(human_size_padded "$sz" 10)" \
+        "$safe_label" \
+        "$C_DIM" "$PRESET_DESC" "$C_RESET"
+    done < <(_list_preset_files)
+  )
+  spinner_stop
+  printf '%s\n' "$out"
 }
 
 _clean_interactive() {
+  spinner_start
   local f
   local -a items=()
   while IFS= read -r f; do
@@ -145,6 +154,7 @@ _clean_interactive() {
     if [[ "${PRESET_SAFE:-false}" == "true" ]]; then safe="safe"; else safe="care"; fi
     items+=("$(printf '%-22s %10s  [%s]  %s' "$PRESET_NAME" "$(human_size "$sz")" "$safe" "$PRESET_DESC")")
   done < <(_list_preset_files)
+  spinner_stop
 
   local chosen
   chosen=$(printf '%s\n' "${items[@]}" | select_multi "Pick preset(s) to clean (Tab multi-select, Enter confirm)")
@@ -232,7 +242,9 @@ _run_preset() {
   after=$(_preset_current_size)
   after_h=$(human_size "$after")
   freed=$(( before - after ))
-  printf '  %sFreed:%s %s\n' "$C_GREEN" "$C_RESET" "$(human_size "$freed")"
+  printf '  %s%sFreed:%s %s%s%s\n' \
+    "$C_BOLD" "$C_GREEN" "$C_RESET" \
+    "$C_GREEN" "$(human_size "$freed")" "$C_RESET"
 }
 
 # Empty all entries inside a directory without removing the directory itself.

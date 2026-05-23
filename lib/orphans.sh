@@ -135,10 +135,8 @@ cmd_orphans() {
     shift
   done
 
-  log_info "Scanning installed apps..."
+  spinner_start
   get_installed_bundle_ids_cached > /dev/null
-
-  log_info "Scanning Library subfolders for orphans..."
 
   # Build list of orphans: lines "<bytes>\t<id>\t<path>"
   local rows=""
@@ -162,6 +160,7 @@ cmd_orphans() {
 
   # Sort desc by size.
   rows=$(printf '%s' "$rows" | sort -t$'\t' -k1 -nr)
+  spinner_stop
 
   if [[ "$count_only" -eq 1 ]]; then
     local n total=0
@@ -210,7 +209,7 @@ cmd_orphans() {
     total_freed=$(( total_freed + sz ))
   done <<< "$chosen"
 
-  printf '\n%sFreed: %s%s\n' "$C_GREEN" "$(human_size "$total_freed")" "$C_RESET"
+  printf '\n%s%sFreed: %s%s\n' "$C_BOLD" "$C_GREEN" "$(human_size "$total_freed")" "$C_RESET"
 }
 
 # Container roots are protected; delete only Data/Bottles inside them.
@@ -228,12 +227,16 @@ _orphan_safe_delete() {
 
 _orphans_table() {
   local rows=$1
-  printf '\n%s%sOrphans%s (no matching installed app):\n\n' "$C_BOLD" "$C_RED" "$C_RESET"
+  printf '\n%s%sOrphans%s %s(no matching installed app)%s\n\n' \
+    "$C_BOLD" "$C_RED" "$C_RESET" "$C_DIM" "$C_RESET"
   printf '%s%10s  %-40s  %s%s\n' "$C_BOLD" "SIZE" "BUNDLE ID" "PATH" "$C_RESET"
   printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..100})" "$C_RESET"
   while IFS=$'\t' read -r sz id path; do
     [[ -z "$path" ]] && continue
-    printf '%10s  %-40s  %s\n' "$(human_size "$sz")" "$id" "${path/#$HOME/\~}"
+    printf '%s  %s%-40s%s  %s%s%s\n' \
+      "$(human_size_padded "$sz" 10)" \
+      "$C_CYAN" "$id" "$C_RESET" \
+      "$C_DIM" "${path/#$HOME/\~}" "$C_RESET"
   done <<< "$rows"
   echo
 }

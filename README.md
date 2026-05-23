@@ -10,7 +10,6 @@ doesn't:
 3. **What's safe to delete right now?** — curated presets for caches that
    regenerate (`huggingface`, `gradle`, `npm`, `pnpm`, `yarn`, Xcode DerivedData, …).
 
-A smaller, sharper alternative to [Mole](https://github.com/tw93/Mole).
 Pure Bash 5, optional `fzf` for nicer UI, no Go runtime.
 
 ---
@@ -125,7 +124,3 @@ clean-me-mac/
 │   └── doctor.sh           cmd_doctor
 └── presets/                one file per preset
 ```
-
-## License
-
-MIT

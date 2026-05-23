@@ -13,12 +13,44 @@ if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   C_GREEN=$'\033[32m'
   C_YELLOW=$'\033[33m'
   C_BLUE=$'\033[34m'
+  C_MAGENTA=$'\033[35m'
+  C_CYAN=$'\033[36m'
   C_DIM=$'\033[2m'
   C_BOLD=$'\033[1m'
   C_RESET=$'\033[0m'
 else
-  C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_DIM='' C_BOLD='' C_RESET=''
+  C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_MAGENTA='' C_CYAN='' C_DIM='' C_BOLD='' C_RESET=''
 fi
+
+# Pick a color for a size value (in bytes). Bigger = warmer = more
+# interesting cleanup target.
+#   >= 5 GB : red+bold
+#   >= 1 GB : yellow
+#   >= 100M : green
+#   <  100M : dim
+size_color() {
+  local b=${1:-0}
+  if   (( b >= 5368709120 )); then printf '%s' "$C_RED$C_BOLD"
+  elif (( b >= 1073741824 )); then printf '%s' "$C_YELLOW"
+  elif (( b >= 104857600  )); then printf '%s' "$C_GREEN"
+  else                              printf '%s' "$C_DIM"
+  fi
+}
+
+# human_size with size-based coloring applied.
+human_size_c() {
+  local b=${1:-0}
+  printf '%s%s%s' "$(size_color "$b")" "$(human_size "$b")" "$C_RESET"
+}
+
+# Right-padded colored size. Colors are applied AROUND the padded text,
+# so the visible-width math is correct (ANSI escapes don't count toward
+# printf's %*s width).
+#   human_size_padded <bytes> [width=10]
+human_size_padded() {
+  local b=${1:-0} width=${2:-10}
+  printf '%s%*s%s' "$(size_color "$b")" "$width" "$(human_size "$b")" "$C_RESET"
+}
 
 log_info()  { [[ "$CMM_JSON" -eq 1 ]] && return 0; printf '%s\n' "$*" >&2; }
 log_warn()  { printf '%s%s%s\n' "$C_YELLOW" "$*" "$C_RESET" >&2; }
@@ -84,6 +116,87 @@ confirm() {
   read -r reply
   [[ "$reply" =~ ^[Yy]$ ]]
 }
+
+# ---------------------------------------------------------------------------
+# Spinner — tongue-in-cheek loading indicator for slow operations.
+# Suppressed when stderr is not a tty, when --json is set, or --verbose
+# (debug logs would clash with the spinner line).
+# ---------------------------------------------------------------------------
+
+CMM_SPINNER_MSGS=(
+  "lollygagging"
+  "ruminating"
+  "marinating"
+  "pondering"
+  "shuffling bytes"
+  "counting bits"
+  "snooping disks"
+  "noodling"
+  "trundling"
+  "spelunking dirs"
+  "rummaging around"
+  "hemming and hawing"
+)
+
+CMM_SPINNER_PID=""
+
+# spinner_start [message-override]
+spinner_start() {
+  CMM_SPINNER_PID=""
+  if [[ ! -t 2 || "$CMM_JSON" -eq 1 || "$CMM_VERBOSE" -eq 1 ]]; then
+    return 0
+  fi
+  local pick
+  if [[ -n "${1:-}" ]]; then
+    pick=$1
+  else
+    pick=${CMM_SPINNER_MSGS[$((RANDOM % ${#CMM_SPINNER_MSGS[@]}))]}
+  fi
+  local -a frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+  (
+    local n=${#frames[@]} i=0
+    # Hide cursor.
+    printf '\033[?25l' >&2
+    while :; do
+      printf '\r  %s%s %s...%s\033[K' "$C_DIM" "${frames[i]}" "$pick" "$C_RESET" >&2
+      i=$(( (i + 1) % n ))
+      sleep 0.08
+    done
+  ) &
+  CMM_SPINNER_PID=$!
+  disown "$CMM_SPINNER_PID" 2>/dev/null || true
+}
+
+spinner_stop() {
+  [[ -z "${CMM_SPINNER_PID:-}" ]] && return 0
+  kill "$CMM_SPINNER_PID" 2>/dev/null
+  wait "$CMM_SPINNER_PID" 2>/dev/null
+  # Clear line and restore cursor.
+  printf '\r\033[K\033[?25h' >&2
+  CMM_SPINNER_PID=""
+}
+
+# Run a command with a spinner. The command's stdout is captured and
+# replayed AFTER the spinner is cleared, so it never overwrites the
+# spinner line.
+#   with_spinner "msg" some_function arg1 arg2
+with_spinner() {
+  local msg=$1; shift
+  if [[ ! -t 2 || "$CMM_JSON" -eq 1 || "$CMM_VERBOSE" -eq 1 ]]; then
+    "$@"
+    return $?
+  fi
+  spinner_start "$msg"
+  local out rc
+  out=$("$@")
+  rc=$?
+  spinner_stop
+  [[ -n "$out" ]] && printf '%s\n' "$out"
+  return $rc
+}
+
+# Ensure the spinner is killed on script exit or interrupt.
+trap 'spinner_stop' EXIT INT TERM
 
 # Safe delete. Honors --dry-run. Refuses to touch dangerous paths.
 safe_rm() {
