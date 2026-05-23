@@ -1,0 +1,148 @@
+#!/opt/homebrew/bin/bash
+# clmac — focused macOS disk cleanup CLI.
+# https://github.com/bagusmerta/clmac
+
+set -u
+set -o pipefail
+
+readonly CMM_VERSION="0.1.0"
+
+# Resolve script dir (handles symlinks).
+_resolve_dir() {
+  local src=${BASH_SOURCE[0]}
+  while [[ -L "$src" ]]; do
+    local dir
+    dir=$(cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd)
+    src=$(readlink "$src")
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" >/dev/null 2>&1 && pwd
+}
+readonly CMM_DIR="$(_resolve_dir)"
+readonly CMM_LIB="$CMM_DIR/lib"
+readonly CMM_PRESETS="$CMM_DIR/presets"
+
+# Source foundation.
+# shellcheck source=lib/common.sh
+source "$CMM_LIB/common.sh"
+# shellcheck source=lib/ui.sh
+source "$CMM_LIB/ui.sh"
+# shellcheck source=lib/apps.sh
+source "$CMM_LIB/apps.sh"
+
+require_bash5
+require_macos
+
+# Cleanup temp files on exit.
+trap '[[ -n "${CMM_INSTALLED_IDS_FILE:-}" && -f "$CMM_INSTALLED_IDS_FILE" ]] && rm -f "$CMM_INSTALLED_IDS_FILE"' EXIT
+
+usage() {
+  cat <<EOF
+${C_BOLD}clmac${C_RESET} — focused macOS cleanup CLI
+
+${C_BOLD}USAGE${C_RESET}
+  clmac <command> [options]
+
+${C_BOLD}COMMANDS${C_RESET}
+  ${C_GREEN}scan${C_RESET}              Categorized disk usage breakdown
+  ${C_GREEN}orphans${C_RESET}           Find & remove leftover app data
+  ${C_GREEN}clean${C_RESET} [preset]    Run a known-safe cleanup preset
+  ${C_GREEN}doctor${C_RESET}            One-screen health summary
+
+${C_BOLD}GLOBAL OPTIONS${C_RESET}
+  -n, --dry-run     Preview without deleting
+  -y, --yes         Skip confirmation prompts
+  -v, --verbose     Extra logging
+      --json        Machine-readable output (scan, doctor)
+  -h, --help        Show this help (or command help)
+      --version     Print version
+
+${C_BOLD}EXAMPLES${C_RESET}
+  clmac scan
+  clmac clean --list
+  clmac clean huggingface
+  clmac orphans --dry-run
+  clmac doctor
+
+EOF
+}
+
+# Parse args. Global flags are consumed anywhere (before or after the
+# command). Unknown flags after the command are forwarded as positional.
+# --help / -h is special: before a command shows top-level help; after a
+# command is forwarded to that command's own help.
+parse_args() {
+  local -a positional=()
+  while (( $# > 0 )); do
+    case "$1" in
+      -n|--dry-run) CMM_DRY_RUN=1 ;;
+      -y|--yes)     CMM_YES=1 ;;
+      -v|--verbose) CMM_VERBOSE=1 ;;
+      --json)       CMM_JSON=1 ;;
+      -h|--help)
+        if (( ${#positional[@]} == 0 )); then
+          CMM_HELP=1
+        else
+          positional+=("$1")
+        fi
+        ;;
+      --version)    echo "clmac $CMM_VERSION"; exit 0 ;;
+      --) shift; positional+=("$@"); break ;;
+      # Unknown flags before a command are errors; after, they're forwarded.
+      -*)
+        if (( ${#positional[@]} == 0 )); then
+          log_error "Unknown flag: $1"; usage >&2; exit 2
+        fi
+        positional+=("$1")
+        ;;
+      *) positional+=("$1") ;;
+    esac
+    shift
+  done
+  CMM_ARGS=("${positional[@]}")
+}
+
+main() {
+  CMM_HELP=0
+  CMM_ARGS=()
+  parse_args "$@"
+
+  local cmd=${CMM_ARGS[0]:-}
+  local -a rest=("${CMM_ARGS[@]:1}")
+
+  if [[ -z "$cmd" ]]; then
+    if [[ "$CMM_HELP" -eq 1 ]]; then
+      usage; exit 0
+    fi
+    usage >&2; exit 2
+  fi
+
+  case "$cmd" in
+    scan)
+      source "$CMM_LIB/scan.sh"
+      cmd_scan "${rest[@]}"
+      ;;
+    orphans)
+      source "$CMM_LIB/orphans.sh"
+      cmd_orphans "${rest[@]}"
+      ;;
+    clean)
+      source "$CMM_LIB/clean.sh"
+      cmd_clean "${rest[@]}"
+      ;;
+    doctor)
+      source "$CMM_LIB/doctor.sh"
+      cmd_doctor "${rest[@]}"
+      ;;
+    help)
+      usage; exit 0
+      ;;
+    *)
+      log_error "Unknown command: $cmd"
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"
