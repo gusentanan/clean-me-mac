@@ -71,31 +71,60 @@ EOF
   for p in "${_excluded_app_support[@]}"; do exc_app_support_args+=("$p"); done
   for p in "${_excluded_caches[@]}";     do exc_cache_args+=("$p"); done
 
-  # Collect rows: "category\tpath\tbytes"
   spinner_start
-  local rows=""
-  local cat_name rest_pipe p sz
+
+  # Pass 1: collect (category, path, kind) tuples. kind is one of:
+  #   normal | minus_app_support | minus_caches
+  local -a cats=() paths=() kinds=()
+  local cat_name rest_pipe p kind
   while IFS='|' read -r cat_name rest_pipe; do
     [[ -z "$cat_name" || -z "$rest_pipe" ]] && continue
     local -a parts
     IFS='|' read -ra parts <<< "$rest_pipe"
     for p in "${parts[@]}"; do
       [[ -z "$p" ]] && continue
-      # Expand $HOME.
       p=${p//\$HOME/$HOME}
       [[ -e "$p" ]] || continue
-
       if [[ "$cat_name" == "App Support (other)" && "$p" == "$HOME/Library/Application Support" ]]; then
-        sz=$(_dir_size_minus "$p" "${exc_app_support_args[@]}" \
-          "$HOME/Library/Application Support/CrossOver" )
+        kind="minus_app_support"
       elif [[ "$cat_name" == "App Caches (other)" && "$p" == "$HOME/Library/Caches" ]]; then
-        sz=$(_dir_size_minus "$p" "${exc_cache_args[@]}")
+        kind="minus_caches"
       else
-        sz=$(dir_size "$p")
+        kind="normal"
       fi
-      rows+="${cat_name}"$'\t'"${p}"$'\t'"${sz}"$'\n'
+      cats+=("$cat_name")
+      paths+=("$p")
+      kinds+=("$kind")
     done
   done < <(_scan_categories)
+
+  # Pass 2: parallel size lookup for every unique path.
+  # Build a path→bytes map by running dir_size_parallel over all paths.
+  declare -A size_map=()
+  local line bytes path
+  while IFS=$'\t' read -r bytes path; do
+    [[ -z "$path" ]] && continue
+    size_map["$path"]=$bytes
+  done < <(printf '%s\0' "${paths[@]}" | dir_size_parallel)
+
+  # Pass 3: assemble rows. For "minus_*" kinds, subtract excluded sizes.
+  local rows="" sz
+  for i in "${!paths[@]}"; do
+    p=${paths[i]}
+    case "${kinds[i]}" in
+      minus_app_support)
+        sz=$(_dir_size_minus "$p" "${exc_app_support_args[@]}" \
+          "$HOME/Library/Application Support/CrossOver")
+        ;;
+      minus_caches)
+        sz=$(_dir_size_minus "$p" "${exc_cache_args[@]}")
+        ;;
+      *)
+        sz=${size_map["$p"]:-0}
+        ;;
+    esac
+    rows+="${cats[i]}"$'\t'"${p}"$'\t'"${sz}"$'\n'
+  done
   spinner_stop
 
   if [[ "$CMM_JSON" -eq 1 ]]; then

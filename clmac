@@ -52,6 +52,7 @@ ${C_BOLD}COMMANDS${C_RESET}
 ${C_BOLD}GLOBAL OPTIONS${C_RESET}
   -n, --dry-run     Preview without deleting
   -y, --yes         Skip confirmation prompts
+      --trash       Move to Finder Trash (recoverable) instead of rm -rf
   -v, --verbose     Extra logging
       --json        Machine-readable output (scan, doctor)
   -h, --help        Show this help (or command help)
@@ -79,6 +80,7 @@ parse_args() {
       -y|--yes)     CMM_YES=1 ;;
       -v|--verbose) CMM_VERBOSE=1 ;;
       --json)       CMM_JSON=1 ;;
+      --trash)      CMM_TRASH=1 ;;
       -h|--help)
         if (( ${#positional[@]} == 0 )); then
           CMM_HELP=1

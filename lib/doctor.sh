@@ -52,23 +52,25 @@ _doctor_top_home() {
   spinner_start
   local out
   out=$(
-    {
-      # Visible top-level dirs.
-      for d in "$HOME"/*; do
-        [[ -d "$d" ]] || continue
-        [[ "$(basename "$d")" == "Library" ]] && continue
-        sz=$(dir_size "$d")
-        printf '%d\t%s\n' "$sz" "$d"
-      done
-      # Hidden top-level dirs.
-      for d in "$HOME"/.*; do
-        [[ -d "$d" ]] || continue
-        n=$(basename "$d")
-        [[ "$n" == "." || "$n" == ".." ]] && continue
-        sz=$(dir_size "$d")
-        printf '%d\t%s\n' "$sz" "$d"
-      done
-    } | sort -t$'\t' -k1 -nr | head -10 \
+    # Collect candidate paths (visible + hidden), excluding Library.
+    local -a paths=()
+    local d n
+    for d in "$HOME"/*; do
+      [[ -d "$d" ]] || continue
+      [[ "$(basename "$d")" == "Library" ]] && continue
+      paths+=("$d")
+    done
+    for d in "$HOME"/.*; do
+      [[ -d "$d" ]] || continue
+      n=$(basename "$d")
+      [[ "$n" == "." || "$n" == ".." ]] && continue
+      paths+=("$d")
+    done
+
+    # Parallel size lookup, sort desc, take top 10.
+    printf '%s\0' "${paths[@]}" \
+      | dir_size_parallel \
+      | sort -t$'\t' -k1 -nr | head -10 \
       | while IFS=$'\t' read -r sz path; do
           printf '  %s  %s\n' "$(human_size_padded "$sz" 10)" "${path/#$HOME/\~}"
         done

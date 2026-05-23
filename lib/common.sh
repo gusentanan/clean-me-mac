@@ -6,6 +6,11 @@
 : "${CMM_YES:=0}"
 : "${CMM_VERBOSE:=0}"
 : "${CMM_JSON:=0}"
+: "${CMM_TRASH:=0}"
+
+# Operation log location (macOS convention).
+CMM_LOG_DIR="$HOME/Library/Logs/clmac"
+CMM_LOG_FILE="$CMM_LOG_DIR/operations.log"
 
 # Colors (disabled when stdout is not a tty or NO_COLOR is set).
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -104,6 +109,20 @@ dir_size_sum() {
   echo "$total"
 }
 
+# Parallel size lookup. Reads NUL-terminated paths from stdin, writes
+# "<bytes>\t<path>" lines on stdout. Uses up to N concurrent `du`s
+# (defaults to CPU count, capped at 12 to avoid I/O thrash).
+#
+# Usage:
+#   printf '%s\0' "${paths[@]}" | dir_size_parallel
+dir_size_parallel() {
+  local jobs=${CMM_PARALLEL_JOBS:-$(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 4)}
+  (( jobs > 12 )) && jobs=12
+  # `du -sk` outputs "<kb>\t<path>", we convert kb→bytes.
+  xargs -0 -n1 -P "$jobs" du -sk 2>/dev/null \
+    | awk -v OFS='\t' '{ kb=$1; $1=""; sub(/^\t/,""); printf "%d\t%s\n", kb*1024, $0 }'
+}
+
 # Confirm prompt. Honors --yes (CMM_YES=1). Returns 0 if yes, 1 if no.
 confirm() {
   local msg=${1:-"Proceed?"}
@@ -198,7 +217,29 @@ with_spinner() {
 # Ensure the spinner is killed on script exit or interrupt.
 trap 'spinner_stop' EXIT INT TERM
 
-# Safe delete. Honors --dry-run. Refuses to touch dangerous paths.
+# Append one line to the operation log. Format:
+#   ISO-8601 TIMESTAMP \t ACTION \t BYTES \t PATH
+log_operation() {
+  local action=$1 path=$2 bytes=${3:-0}
+  mkdir -p "$CMM_LOG_DIR" 2>/dev/null || return 0
+  printf '%s\t%s\t%d\t%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$action" "$bytes" "$path" \
+    >> "$CMM_LOG_FILE"
+}
+
+# Move a path to the Finder Trash via AppleScript. Recoverable from the Trash.
+trash_path() {
+  local path=$1
+  [[ -e "$path" ]] || return 0
+  # Resolve to an absolute POSIX path.
+  local abs
+  abs=$(/usr/bin/python3 -c "import os,sys; print(os.path.abspath(sys.argv[1]))" "$path" 2>/dev/null) \
+    || abs=$path
+  /usr/bin/osascript -e "tell application \"Finder\" to delete POSIX file \"$abs\"" >/dev/null 2>&1
+}
+
+# Safe delete. Honors --dry-run and --trash. Refuses dangerous paths.
+# Logs every successful action to $CMM_LOG_FILE.
 safe_rm() {
   local path=$1
   if [[ -z "$path" || "$path" == "/" || "$path" == "$HOME" ]]; then
@@ -209,9 +250,30 @@ safe_rm() {
     log_debug "skip (missing): $path"
     return 0
   fi
+
+  local sz
+  sz=$(dir_size "$path")
+
   if [[ "$CMM_DRY_RUN" -eq 1 ]]; then
-    printf '%s[dry-run]%s would remove %s\n' "$C_DIM" "$C_RESET" "$path" >&2
+    if [[ "$CMM_TRASH" -eq 1 ]]; then
+      printf '%s[dry-run]%s would trash %s\n' "$C_DIM" "$C_RESET" "$path" >&2
+    else
+      printf '%s[dry-run]%s would remove %s\n' "$C_DIM" "$C_RESET" "$path" >&2
+    fi
     return 0
   fi
-  rm -rf -- "$path"
+
+  if [[ "$CMM_TRASH" -eq 1 ]]; then
+    if trash_path "$path"; then
+      log_operation "trash" "$path" "$sz"
+      return 0
+    fi
+    log_warn "trash failed for $path; falling back to rm"
+  fi
+
+  if rm -rf -- "$path"; then
+    log_operation "rm" "$path" "$sz"
+    return 0
+  fi
+  return 1
 }

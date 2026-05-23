@@ -44,8 +44,13 @@ cd clean-me-mac
 
 - `-n` / `--dry-run` — preview without deleting
 - `-y` / `--yes` — skip confirmation prompts
+- `--trash` — move to Finder Trash (recoverable) instead of `rm -rf`
 - `-v` / `--verbose`
 - `--json` — machine-readable output (scan, doctor, orphans)
+
+Every successful delete is appended to `~/Library/Logs/clmac/operations.log`
+(tab-separated: timestamp, action, bytes, path), so you can audit what was
+removed.
 
 ## Presets
 
@@ -63,7 +68,11 @@ cd clean-me-mac
 | `xcode-derived` | ✅ | Xcode DerivedData |
 | `xcode-archives` | ⚠️ | Xcode build archives — do not delete if needed for App Store |
 | `xcode-device-support` | ✅ | iOS device symbols (redownloaded on connect) |
+| `android-studio` | ✅ | Android Studio caches & logs across all installed versions |
+| `vscode-cache` | ✅ | VS Code caches, logs, GPU/code caches |
 | `chrome-cache` | ✅ | Chrome cache directories |
+| `safari-cache` | ✅ | Safari + WebKit content cache |
+| `firefox-cache` | ✅ | Firefox HTTP & startup cache (all profiles) |
 | `brew-cleanup` | ✅ | Runs `brew cleanup --prune=all` |
 | `trash` | ⚠️ | Empties `~/.Trash` permanently |
 

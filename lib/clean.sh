@@ -7,6 +7,9 @@
 #   - PRESET_COMMAND (string)           runs a shell command
 #   - PRESET_SCAN=true + PRESET_SCAN_* dynamic scan preset
 #
+# Glob patterns in PRESET_PATHS (e.g. `AndroidStudio*`) are expanded
+# at load time using find, which handles spaces and missing parents.
+#
 # Sourcing into the caller's scope — clear vars first to avoid leaks.
 _load_preset() {
   local file=$1
@@ -16,6 +19,29 @@ _load_preset() {
   PRESET_SCAN_ROOTS=()
   # shellcheck disable=SC1090
   source "$file"
+  _expand_preset_globs
+}
+
+# Expand any glob-like entries in PRESET_PATHS in-place.
+_expand_preset_globs() {
+  (( ${#PRESET_PATHS[@]} == 0 )) && return 0
+  local -a out=() globbed
+  local p parent base
+  for p in "${PRESET_PATHS[@]}"; do
+    if [[ "$p" == *[\*\?\[]* ]]; then
+      parent=$(dirname "$p")
+      base=$(basename "$p")
+      [[ -d "$parent" ]] || continue
+      globbed=()
+      while IFS= read -r -d '' m; do
+        globbed+=("$m")
+      done < <(find "$parent" -maxdepth 1 -name "$base" -print0 2>/dev/null)
+      out+=("${globbed[@]}")
+    else
+      out+=("$p")
+    fi
+  done
+  PRESET_PATHS=("${out[@]}")
 }
 
 # List preset files (just the filenames without .sh).
