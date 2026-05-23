@@ -12,6 +12,8 @@ doesn't:
 
 Pure Bash 5, optional `fzf` for nicer UI, no Go runtime.
 
+![clmac clean — interactive preset picker](docs/clean-picker.png)
+
 ---
 
 ## Install
