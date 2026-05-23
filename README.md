@@ -12,7 +12,21 @@ doesn't:
 
 Pure Bash 5, optional `fzf` for nicer UI, no Go runtime.
 
-![clmac clean — interactive preset picker](docs/clean-picker.png)
+---
+
+## Screenshots
+
+### `clmac scan` — categorized disk usage
+
+![clmac scan — disk usage by category, with sizes colored by magnitude](docs/scan.png)
+
+### `clmac orphans` — find leftover app data
+
+![clmac orphans — picker showing app data with no matching installed app](docs/orphans.png)
+
+### `clmac clean` — interactive preset picker
+
+![clmac clean — fzf-powered picker for cleanup presets](docs/clean-picker.png)
 
 ---
 
