@@ -132,7 +132,7 @@ confirm() {
   fi
   local reply
   printf '%s%s%s [y/N] ' "$C_BOLD" "$msg" "$C_RESET" >&2
-  read -r reply
+  read -r reply </dev/tty
   [[ "$reply" =~ ^[Yy]$ ]]
 }
 
