@@ -9,6 +9,7 @@ Dev caches|$HOME/.gradle|$HOME/.dartServer|$HOME/.cache|$HOME/.pub-cache|$HOME/.
 Xcode|$HOME/Library/Developer/Xcode/DerivedData|$HOME/Library/Developer/Xcode/iOS DeviceSupport|$HOME/Library/Developer/Xcode/Archives|$HOME/Library/Developer/CoreSimulator
 Android|$HOME/.android|$HOME/Library/Android
 Flutter|$HOME/fvm|$HOME/develop/flutter
+Python|$HOME/.pyenv/versions|$HOME/miniforge3|$HOME/miniconda3|$HOME/anaconda3|$HOME/mambaforge|$HOME/.conda|$HOME/Library/Application Support/StabilityMatrix|$HOME/StabilityMatrix
 Browsers|$HOME/Library/Application Support/Google/Chrome|$HOME/Library/Application Support/Firefox|$HOME/Library/Application Support/com.operasoftware.Opera|$HOME/Library/Application Support/BraveSoftware|$HOME/Library/Caches/Google/Chrome|$HOME/Library/Caches/Firefox|$HOME/Library/Caches/com.operasoftware.Opera|$HOME/Library/Safari
 App Containers|$HOME/Library/Containers
 App Support (other)|$HOME/Library/Application Support
@@ -24,6 +25,7 @@ _excluded_app_support=(
   "$HOME/Library/Application Support/Firefox"
   "$HOME/Library/Application Support/com.operasoftware.Opera"
   "$HOME/Library/Application Support/BraveSoftware"
+  "$HOME/Library/Application Support/StabilityMatrix"
 )
 _excluded_caches=(
   "$HOME/Library/Caches/Google/Chrome"
@@ -179,7 +181,10 @@ _scan_table() {
         "$cat" "$(human_size_padded "$bytes" 12)" \
         "$C_DIM" "$short" "$C_RESET"
     done
-  echo
+  printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..90})" "$C_RESET"
+  printf '%sNote: scan only covers $HOME paths. Run %s%sclmac system%s%s to explain the gap\n' \
+    "$C_DIM" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_DIM"
+  printf 'between this total and macOS Storage settings ("System Data", "macOS").%s\n\n' "$C_RESET"
 }
 
 _scan_json() {

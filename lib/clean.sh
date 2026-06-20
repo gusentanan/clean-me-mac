@@ -17,9 +17,40 @@ _load_preset() {
   unset PRESET_SCAN PRESET_SCAN_NAME PRESET_EMPTY_NOT_REMOVE PRESET_SCAN_MIN_AGE_DAYS
   PRESET_PATHS=()
   PRESET_SCAN_ROOTS=()
+  PRESET_SCAN_NAMES=()
   # shellcheck disable=SC1090
   source "$file"
   _expand_preset_globs
+}
+
+# Build a find command that matches any of PRESET_SCAN_NAMES (or PRESET_SCAN_NAME).
+# Prints NUL-terminated paths of matching directories under <root>.
+_scan_find_by_names() {
+  local root=$1
+  if (( ${#PRESET_SCAN_NAMES[@]} > 0 )); then
+    local -a args=( "$root" -type d \( )
+    local first=1
+    local n
+    for n in "${PRESET_SCAN_NAMES[@]}"; do
+      (( first )) || args+=( -o )
+      args+=( -name "$n" )
+      first=0
+    done
+    args+=( \) -prune -print0 )
+    find "${args[@]}" 2>/dev/null
+  else
+    find "$root" -type d -name "$PRESET_SCAN_NAME" -prune -print0 2>/dev/null
+  fi
+}
+
+# Human-readable label for scan names (used in UI prompts).
+_scan_names_label() {
+  if (( ${#PRESET_SCAN_NAMES[@]} > 0 )); then
+    local IFS='/'
+    echo "${PRESET_SCAN_NAMES[*]}"
+  else
+    echo "$PRESET_SCAN_NAME"
+  fi
 }
 
 # Expand any glob-like entries in PRESET_PATHS in-place.
@@ -71,12 +102,11 @@ _preset_current_size() {
     local total=0 root
     for root in "${PRESET_SCAN_ROOTS[@]}"; do
       [[ -d "$root" ]] || continue
-      # Sum sizes of matching dirs.
       while IFS= read -r -d '' d; do
         local s
         s=$(dir_size "$d")
         total=$(( total + s ))
-      done < <(find "$root" -type d -name "$PRESET_SCAN_NAME" -prune -print0 2>/dev/null)
+      done < <(_scan_find_by_names "$root")
     done
     echo "$total"
     return
@@ -293,25 +323,25 @@ _empty_dir() {
 _run_scan_preset() {
   local root d
   local -a found=()
+  local label
+  label=$(_scan_names_label)
   for root in "${PRESET_SCAN_ROOTS[@]}"; do
     [[ -d "$root" ]] || continue
     while IFS= read -r -d '' d; do
-      # Skip if modified within the min-age window.
       if [[ -n "${PRESET_SCAN_MIN_AGE_DAYS:-}" ]]; then
         if find "$d" -maxdepth 0 -mtime -"${PRESET_SCAN_MIN_AGE_DAYS}" -print -quit | grep -q .; then
           continue
         fi
       fi
       found+=("$d")
-    done < <(find "$root" -type d -name "$PRESET_SCAN_NAME" -prune -print0 2>/dev/null)
+    done < <(_scan_find_by_names "$root")
   done
 
   if (( ${#found[@]} == 0 )); then
-    log_info "  No $PRESET_SCAN_NAME directories found (older than ${PRESET_SCAN_MIN_AGE_DAYS:-0} days)."
+    log_info "  No $label directories found (older than ${PRESET_SCAN_MIN_AGE_DAYS:-0} days)."
     return 0
   fi
 
-  # Build labelled lines for picker: "<size>\t<path>"
   local -a labelled=()
   local sz
   for d in "${found[@]}"; do
@@ -320,7 +350,7 @@ _run_scan_preset() {
   done
 
   local chosen
-  chosen=$(printf '%s\n' "${labelled[@]}" | select_multi "Pick $PRESET_SCAN_NAME dirs to remove")
+  chosen=$(printf '%s\n' "${labelled[@]}" | select_multi "Pick $label dirs to remove")
   [[ -z "$chosen" ]] && { log_info "Nothing selected."; return 0; }
 
   local line path expanded

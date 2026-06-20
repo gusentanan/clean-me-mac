@@ -44,7 +44,8 @@ ${C_BOLD}USAGE${C_RESET}
   clmac <command> [options]
 
 ${C_BOLD}COMMANDS${C_RESET}
-  ${C_GREEN}scan${C_RESET}              Categorized disk usage breakdown
+  ${C_GREEN}scan${C_RESET}              Categorized disk usage breakdown (\$HOME paths)
+  ${C_GREEN}system${C_RESET}            Explain "System Data" gap — snapshots, swap, iOS backups
   ${C_GREEN}orphans${C_RESET}           Find & remove leftover app data
   ${C_GREEN}clean${C_RESET} [preset]    Run a known-safe cleanup preset
   ${C_GREEN}doctor${C_RESET}            One-screen health summary
@@ -123,6 +124,10 @@ main() {
     scan)
       source "$CMM_LIB/scan.sh"
       cmd_scan "${rest[@]}"
+      ;;
+    system)
+      source "$CMM_LIB/system.sh"
+      cmd_system "${rest[@]}"
       ;;
     orphans)
       source "$CMM_LIB/orphans.sh"
