@@ -79,6 +79,10 @@ EOF
   #   normal | minus_app_support | minus_caches
   local -a cats=() paths=() kinds=()
   local cat_name rest_pipe p kind
+  # Tracks inodes already seen, so case-insensitive dupes on APFS (e.g.
+  # ~/Projects and ~/projects resolving to the same directory) are only
+  # counted once instead of inflating category totals.
+  declare -A seen_inodes=()
   while IFS='|' read -r cat_name rest_pipe; do
     [[ -z "$cat_name" || -z "$rest_pipe" ]] && continue
     local -a parts
@@ -87,6 +91,15 @@ EOF
       [[ -z "$p" ]] && continue
       p=${p//\$HOME/$HOME}
       [[ -e "$p" ]] || continue
+      local inode
+      inode=$(stat -f '%d:%i' "$p" 2>/dev/null)
+      if [[ -n "$inode" ]]; then
+        if [[ -n "${seen_inodes[$inode]:-}" ]]; then
+          log_debug "scan: skipping duplicate path (same as ${seen_inodes[$inode]}): $p"
+          continue
+        fi
+        seen_inodes[$inode]=$p
+      fi
       if [[ "$cat_name" == "App Support (other)" && "$p" == "$HOME/Library/Application Support" ]]; then
         kind="minus_app_support"
       elif [[ "$cat_name" == "App Caches (other)" && "$p" == "$HOME/Library/Caches" ]]; then
