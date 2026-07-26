@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -146,5 +147,79 @@ func TestLeftPopsLevel(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Errorf("popping a level should not schedule a new Cmd")
+	}
+}
+
+func TestInitStartsTickingWhenSizing(t *testing.T) {
+	m := fixtureModel() // roots level has sizing=true
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("expected Init to return a batched Cmd (sizing + tick) when the initial level is sizing")
+	}
+}
+
+func TestInitDoesNotTickWhenNotSizing(t *testing.T) {
+	m := initialModel(nil)
+	m.stack[0].sizing = false
+	if cmd := m.Init(); cmd != nil {
+		t.Errorf("expected nil Cmd when the initial level isn't sizing, got %v", cmd)
+	}
+}
+
+func TestTickMsgReschedulesWhileSizing(t *testing.T) {
+	m := fixtureModel()
+	m.stack[0].sizing = true
+	updated, cmd := m.Update(tickMsg(time.Now()))
+	m2 := updated.(model)
+	if m2.spinnerFrame != 1 {
+		t.Errorf("expected spinnerFrame to advance to 1, got %d", m2.spinnerFrame)
+	}
+	if cmd == nil {
+		t.Error("expected tickMsg to reschedule another tick while sizing")
+	}
+}
+
+func TestTickMsgStopsWhenNotSizing(t *testing.T) {
+	m := fixtureModel()
+	m.stack[0].sizing = false
+	updated, cmd := m.Update(tickMsg(time.Now()))
+	m2 := updated.(model)
+	if m2.spinnerFrame != 1 {
+		t.Errorf("expected spinnerFrame to still advance to 1, got %d", m2.spinnerFrame)
+	}
+	if cmd != nil {
+		t.Error("expected tickMsg to NOT reschedule once sizing is done")
+	}
+}
+
+func TestDrillingInWhileAlreadySizingDoesNotDoubleTick(t *testing.T) {
+	m := fixtureModel() // roots level starts with sizing=true
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m2 := updated.(model)
+	if !m2.stack[1].sizing {
+		t.Fatal("expected the newly pushed level to be sizing")
+	}
+	if cmd == nil {
+		t.Fatal("expected a Cmd when drilling in")
+	}
+	// The parent level was already sizing, so its tick loop stays alive
+	// and will keep driving the spinner once cur() points at the new
+	// level — executing the returned Cmd here should yield listDirCmd's
+	// message directly, NOT a tea.BatchMsg (which is what a second,
+	// redundant tickCmd() batched alongside it would produce).
+	if _, isBatch := cmd().(tea.BatchMsg); isBatch {
+		t.Error("drilling in while the parent was already sizing started a second tick chain (tea.BatchMsg)")
+	}
+}
+
+func TestDrillingInWhenNotSizingStartsTick(t *testing.T) {
+	m := fixtureModel()
+	m.stack[0].sizing = false // parent finished sizing, no tick loop alive
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected a Cmd when drilling in")
+	}
+	if _, isBatch := cmd().(tea.BatchMsg); !isBatch {
+		t.Error("expected a fresh tick chain (tea.BatchMsg) when nothing was already ticking")
 	}
 }

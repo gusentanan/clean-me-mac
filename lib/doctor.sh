@@ -25,6 +25,7 @@ cmd_doctor() {
 
 _doctor_disk() {
   printf '\n%s%sDisk%s\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 60)" "$C_RESET"
 
   # Parse APFS container stats — first container only (boot disk).
   local apfs cap used free pct
@@ -53,6 +54,7 @@ _doctor_disk() {
 _doctor_top_home() {
   printf '\n%s%sTop 10 dirs in $HOME%s %s(excluding Library)%s\n' \
     "$C_BOLD" "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 60)" "$C_RESET"
   spinner_start
   local out
   out=$(
@@ -72,12 +74,23 @@ _doctor_top_home() {
     done
 
     # Parallel size lookup, sort desc, take top 10.
-    printf '%s\0' "${paths[@]}" \
+    local rows
+    rows=$(printf '%s\0' "${paths[@]}" \
       | dir_size_parallel \
-      | sort -t$'\t' -k1 -nr | head -10 \
-      | while IFS=$'\t' read -r sz path; do
-          printf '  %s  %s\n' "$(human_size_padded "$sz" 10)" "${path/#$HOME/\~}"
-        done
+      | sort -t$'\t' -k1 -nr | head -10)
+
+    # Bars are relative to the largest of these 10, not a whole-disk total —
+    # this is a "what's biggest among these" view, not a percentage-of-disk one.
+    local max
+    max=$(head -1 <<< "$rows" | cut -f1)
+    [[ -z "$max" ]] && max=0
+
+    while IFS=$'\t' read -r sz path; do
+      [[ -z "$sz" ]] && continue
+      local p="0.0"
+      (( max > 0 )) && p=$(awk -v b="$sz" -v t="$max" 'BEGIN { printf "%.1f", (b/t)*100 }')
+      printf '  %s  %s  %s\n' "$(render_bar "$p" 16)" "$(human_size_padded "$sz" 10)" "${path/#$HOME/\~}"
+    done <<< "$rows"
   )
   spinner_stop
   printf '%s\n' "$out"
@@ -106,6 +119,7 @@ _doctor_orphans() {
 _doctor_top_presets() {
   printf '\n%s%sTop 5 cleanable presets%s %s(current size)%s\n' \
     "$C_BOLD" "$C_BLUE" "$C_RESET" "$C_DIM" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 60)" "$C_RESET"
   source "$CMM_LIB/clean.sh"
   spinner_start
   local out
@@ -116,14 +130,23 @@ _doctor_top_presets() {
       sz=$(_preset_current_size)
       rows+="${sz}"$'\t'"${PRESET_NAME}"$'\t'"${PRESET_DESC}"$'\n'
     done < <(_list_preset_files)
-    printf '%s' "$rows" | sort -t$'\t' -k1 -nr | head -5 \
-      | while IFS=$'\t' read -r sz name desc; do
-          [[ -z "$name" ]] && continue
-          printf '  %s  %s%-22s%s %s%s%s\n' \
-            "$(human_size_padded "$sz" 10)" \
-            "$C_CYAN" "$name" "$C_RESET" \
-            "$C_DIM" "$desc" "$C_RESET"
-        done
+    rows=$(printf '%s' "$rows" | sort -t$'\t' -k1 -nr | head -5)
+
+    # Bars are relative to the largest of these 5, not a whole-disk total.
+    local max
+    max=$(head -1 <<< "$rows" | cut -f1)
+    [[ -z "$max" ]] && max=0
+
+    while IFS=$'\t' read -r sz name desc; do
+      [[ -z "$name" ]] && continue
+      local p="0.0"
+      (( max > 0 )) && p=$(awk -v b="$sz" -v t="$max" 'BEGIN { printf "%.1f", (b/t)*100 }')
+      printf '  %s  %s  %s%-22s%s %s%s%s\n' \
+        "$(render_bar "$p" 16)" \
+        "$(human_size_padded "$sz" 10)" \
+        "$C_CYAN" "$name" "$C_RESET" \
+        "$C_DIM" "$desc" "$C_RESET"
+    done <<< "$rows"
   )
   spinner_stop
   printf '%s\n' "$out"

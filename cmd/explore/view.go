@@ -7,6 +7,14 @@ import (
 
 const barWidth = 24
 
+// Same braille spinner frames as lib/common.sh's spinner_start, so the
+// two implementations of clmac read as one system.
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+func (m model) spinnerChar() string {
+	return spinnerFrames[m.spinnerFrame%len(spinnerFrames)]
+}
+
 // humanSize matches lib/common.sh's human_size formatting (B/K/M/G/T/P,
 // one decimal place past the first unit) so numbers read the same as the
 // rest of clmac.
@@ -59,7 +67,7 @@ func (m model) View() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n  \x1b[1mclmac explore\x1b[0m  %s\n", lvl.breadcrumb)
 	if lvl.sizing {
-		fmt.Fprintf(&b, "  \x1b[2mSizing…\x1b[0m\n\n")
+		fmt.Fprintf(&b, "  \x1b[36m%s\x1b[0m \x1b[2mSizing…\x1b[0m\n\n", m.spinnerChar())
 	} else {
 		b.WriteString("\n")
 	}
@@ -98,7 +106,7 @@ func (m model) View() string {
 		if i == lvl.cursor {
 			pointer = "\x1b[36m\x1b[1m▶\x1b[0m"
 		}
-		sizeStr := "pending…"
+		sizeStr := m.spinnerChar() + " sizing"
 		if e.sized || !e.isDir {
 			sizeStr = humanSize(e.bytes)
 		}

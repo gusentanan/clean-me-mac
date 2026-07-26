@@ -187,6 +187,22 @@ confirm() {
   [[ "$reply" =~ ^[Yy]$ ]]
 }
 
+# press_any_key — blocks until a keypress, then clears its own prompt line.
+# Use before returning to an alt-screen picker (cmd_menu's loop) after
+# printing report/summary output on the main screen: entering alt-screen
+# again immediately hides whatever was just printed, so callers that loop
+# back into a picker after a non-interactive action need this pause or the
+# user never gets to read the result. No-op when there's no real terminal
+# (matches the interactivity check in ui.sh) or when --yes/--json is set.
+press_any_key() {
+  [[ "$CMM_YES" -eq 1 || "$CMM_JSON" -eq 1 ]] && return 0
+  [[ -t 2 ]] || return 0
+  { : </dev/tty; } 2>/dev/null || return 0
+  printf '\n%sPress any key to continue…%s' "$C_DIM" "$C_RESET" >&2
+  read -r -s -n 1 _ </dev/tty 2>/dev/null
+  printf '\r\033[K' >&2
+}
+
 # ---------------------------------------------------------------------------
 # Spinner — tongue-in-cheek loading indicator for slow operations.
 # Suppressed when stderr is not a tty, when --json is set, or --verbose

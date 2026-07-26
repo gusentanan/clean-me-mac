@@ -3,6 +3,7 @@ package main
 import (
 	"os/exec"
 	"sort"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -37,11 +38,12 @@ type level struct {
 }
 
 type model struct {
-	stack  []level
-	width  int
-	height int
-	quit   bool
-	err    error
+	stack        []level
+	width        int
+	height       int
+	quit         bool
+	err          error
+	spinnerFrame int
 }
 
 type levelReadyMsg struct {
@@ -51,6 +53,19 @@ type levelReadyMsg struct {
 
 type sizedMsg struct {
 	sizes map[string]int64
+}
+
+// tickMsg drives the sizing spinner. Without this, a level whose
+// directories are still being `du`'d showed a static "pending…" label —
+// indistinguishable from a hang. tickCmd reschedules itself only while the
+// current level is still loading (see the tickMsg case in Update), so it
+// naturally stops once sizing finishes instead of ticking forever.
+type tickMsg time.Time
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func initialModel(roots []rootDef) model {
@@ -64,7 +79,11 @@ func initialModel(roots []rootDef) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return sizeCurrentLevelCmd(m.stack[len(m.stack)-1])
+	lvl := m.stack[len(m.stack)-1]
+	if !lvl.sizing {
+		return nil
+	}
+	return tea.Batch(sizeCurrentLevelCmd(lvl), tickCmd())
 }
 
 // sizeCurrentLevelCmd sizes every directory entry in a level in parallel.
@@ -132,6 +151,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lvl.sizing = false
 		return m, nil
 
+	case tickMsg:
+		m.spinnerFrame++
+		if m.cur().sizing {
+			return m, tickCmd()
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -176,11 +202,21 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		chosen := lvl.entries[lvl.cursor]
 		if chosen.isDir {
+			// If the level being left is still sizing, its tick loop is
+			// already alive and will keep driving the spinner once cur()
+			// points at the new level (each tick re-checks m.cur().sizing
+			// at fire time) — starting a second chain here would just
+			// double the animation speed. Only kick off a fresh one if
+			// nothing was already ticking.
+			needsTick := !lvl.sizing
 			m.stack = append(m.stack, level{
 				breadcrumb: chosen.path,
 				path:       chosen.path,
 				sizing:     true,
 			})
+			if needsTick {
+				return m, tea.Batch(listDirCmd(chosen.path), tickCmd())
+			}
 			return m, listDirCmd(chosen.path)
 		}
 		return m, revealInFinder(chosen.path)

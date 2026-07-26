@@ -18,7 +18,7 @@ cmd_system() {
   fi
 
   printf '\n%s%sclmac system%s — what macOS hides in "System Data"\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
-  printf '%s%s%s\n\n' "$C_DIM" "$(printf '%.0s─' {1..60})" "$C_RESET"
+  printf '%s%s%s\n\n' "$C_DIM" "$(divider_eq)" "$C_RESET"
 
   _system_disk_gap
   printf '\n'
@@ -38,6 +38,7 @@ cmd_system() {
 
 _system_disk_gap() {
   printf '%s%sDisk%s\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 60)" "$C_RESET"
 
   local apfs cap_bytes used_bytes free_bytes
   apfs=$(diskutil apfs list 2>/dev/null)
@@ -48,9 +49,14 @@ _system_disk_gap() {
   free_bytes=$(awk '/Capacity Not Allocated/     { match($0, /[0-9]+/); print substr($0, RSTART, RLENGTH); exit }' <<< "$apfs")
 
   if [[ -n "$used_bytes" ]]; then
+    local pct pct_color="$C_GREEN"
+    pct=$(awk -v u="$used_bytes" -v c="$cap_bytes" 'BEGIN { printf "%.0f", (u/c)*100 }')
+    (( pct >= 70 )) && pct_color="$C_YELLOW"
+    (( pct >= 85 )) && pct_color="$C_RED$C_BOLD"
     printf '  %-16s %s\n' "Capacity:"  "$(human_size_c "$cap_bytes")"
     printf '  %-16s %s\n' "Used:"      "$(human_size_c "$used_bytes")"
     printf '  %-16s %s\n' "Free:"      "$(human_size_c "$free_bytes")"
+    printf '  %-16s %s %s%s%%%s\n' "" "$(render_bar "$pct" 30)" "$pct_color" "$pct" "$C_RESET"
   else
     df -h / | awk 'NR==2 { printf "  Root: %s used of %s\n", $3, $2 }'
   fi

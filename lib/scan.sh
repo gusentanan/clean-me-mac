@@ -151,12 +151,8 @@ EOF
 
 _scan_table() {
   local rows=$1
-  # Compute category totals.
-  printf '\n%s%sclmac scan%s — disk usage by category\n\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
-
-  # Totals per category
-  printf '%s%-22s %12s%s\n' "$C_BOLD" "CATEGORY" "SIZE" "$C_RESET"
-  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 40)" "$C_RESET"
+  printf '\n%s%sclmac scan%s — disk usage by category\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
+  printf '%s%s%s\n\n' "$C_DIM" "$(divider_eq)" "$C_RESET"
 
   # Sort categories by their total size desc. Guard against empty keys
   # (a trailing newline in $rows can produce a phantom "" key in awk).
@@ -165,20 +161,30 @@ _scan_table() {
                        END { for (k in totals) printf "%s\t%d\n", k, totals[k] }' <<< "$rows" \
     | sort -t$'\t' -k2 -nr)
 
+  # Pass 1: grand total, needed up front so bar % is relative to it.
   local grand=0 cat bytes
   while IFS=$'\t' read -r cat bytes; do
     [[ -z "$cat" || "$bytes" == "" ]] && continue
-    printf '%-22s %s\n' "$cat" "$(human_size_padded "$bytes" 12)"
     grand=$(( grand + bytes ))
   done <<< "$totals"
-  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 40)" "$C_RESET"
-  printf '%s%-22s %s%s\n\n' \
-    "$C_BOLD" "TOTAL" \
-    "$(printf '%s%12s%s' "$C_BOLD$C_MAGENTA" "$(human_size "$grand")" "$C_RESET")" \
-    "$C_RESET"
+
+  # Pass 2: one bar-chart row per category, mole-analyzer style.
+  while IFS=$'\t' read -r cat bytes; do
+    [[ -z "$cat" || "$bytes" == "" ]] && continue
+    local p="0.0"
+    (( grand > 0 )) && p=$(awk -v b="$bytes" -v t="$grand" 'BEGIN { printf "%.1f", (b/t)*100 }')
+    printf '  %s  %5s%%  |  %-22s %s\n' \
+      "$(render_bar "$p" 24)" "$p" "$cat" "$(human_size_padded "$bytes" 10)"
+  done <<< "$totals"
+
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 66)" "$C_RESET"
+  printf '%sTotal%s %*s%s%s%s\n\n' \
+    "$C_BOLD" "$C_RESET" 30 "" \
+    "$C_BOLD$C_MAGENTA" "$(human_size "$grand")" "$C_RESET"
 
   # Detail listing, sorted by bytes desc within each category.
-  printf '%s%sTop items%s\n\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
+  printf '%s%sTop items%s\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_eq)" "$C_RESET"
   printf '%s%-22s %12s  %s%s\n' "$C_BOLD" "CATEGORY" "SIZE" "PATH" "$C_RESET"
   printf '%s%s%s\n' "$C_DIM" "$(divider_dash 90)" "$C_RESET"
 

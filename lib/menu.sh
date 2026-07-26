@@ -34,13 +34,18 @@ cmd_menu() {
     (( rc == 130 )) && return 0
     [[ -z "$chosen" ]] && return 0
 
+    # scan/system/doctor/orphans/clean print report output on the main
+    # screen; looping straight back into select_menu switches to the alt
+    # screen immediately and hides it before it can be read, so pause for
+    # a keypress first. explore is skipped — it's its own interactive
+    # session and the user already chose to quit out of it.
     case "$chosen" in
-      scan)    source "$CMM_LIB/scan.sh";    cmd_scan ;;
+      scan)    source "$CMM_LIB/scan.sh";    cmd_scan;    press_any_key ;;
       explore) source "$CMM_LIB/explore.sh"; cmd_explore ;;
-      system)  source "$CMM_LIB/system.sh";  cmd_system ;;
-      orphans) source "$CMM_LIB/orphans.sh"; cmd_orphans ;;
-      clean)   source "$CMM_LIB/clean.sh";   cmd_clean ;;
-      doctor)  source "$CMM_LIB/doctor.sh";  cmd_doctor ;;
+      system)  source "$CMM_LIB/system.sh";  cmd_system;  press_any_key ;;
+      orphans) source "$CMM_LIB/orphans.sh"; cmd_orphans; press_any_key ;;
+      clean)   source "$CMM_LIB/clean.sh";   cmd_clean;   press_any_key ;;
+      doctor)  source "$CMM_LIB/doctor.sh";  cmd_doctor;  press_any_key ;;
     esac
   done
 }
