@@ -256,7 +256,7 @@ _tui_divider() {
 # Prints the chosen payload on stdout. Sets CMM_MENU_QUIT=1 and returns 130
 # on quit (q / Esc / Ctrl-C); returns 1 on an empty item list.
 tui_select_menu() {
-  local header=$1 footer=$2 _label=${3:-} items=$4
+  local header=$1 footer=$2 _label=${3:-} items=$4 banner=${5:-}
   local -a tui_labels=() tui_payloads=()
   local disp payload
   while IFS=$'\t' read -r disp payload; do
@@ -269,7 +269,18 @@ tui_select_menu() {
 
   local rows cols page_size cursor=0 top=0
   read -r rows cols < <(tui_term_size)
+
+  # A banner (menu.sh's block-letter wordmark) eats into the same vertical
+  # budget as the item list — account for its height before sizing pages,
+  # and skip drawing it at all if the terminal's too short to spare the
+  # room (falls back to just the plain header, same as no banner passed).
+  local -a banner_lines=()
+  [[ -n "$banner" ]] && mapfile -t banner_lines <<< "$banner"
+  local banner_active=0
+  (( ${#banner_lines[@]} > 0 && rows >= ${#banner_lines[@]} + 10 )) && banner_active=1
+
   page_size=$(( rows - 6 ))
+  (( banner_active )) && page_size=$(( page_size - ${#banner_lines[@]} - 1 ))
   (( page_size < 1 )) && page_size=1
   (( page_size > n )) && page_size=$n
 
@@ -283,6 +294,13 @@ tui_select_menu() {
     (( cursor >= top + page_size )) && top=$(( cursor - page_size + 1 ))
 
     printf '\033[H\033[J' >&2
+    if (( banner_active )); then
+      local bline
+      for bline in "${banner_lines[@]}"; do
+        printf '  %s\n' "$bline" >&2
+      done
+      printf '\n' >&2
+    fi
     printf '  %s%s%s\n' "$C_BOLD" "$header" "$C_RESET" >&2
     printf '  %s%s%s\n\n' "$C_DIM" "$(_tui_divider "$header" "$cols")" "$C_RESET" >&2
 
