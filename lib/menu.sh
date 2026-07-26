@@ -14,71 +14,54 @@ doctor|One-screen health summary
 EOF
 }
 
-# Sunset/reflection ASCII art shown to the left of the top-level menu on
-# a wide-enough terminal (see tui_select_menu's art_active check). This is
-# a hand-transcription (visual read of a reference screenshot, not an
-# OCR/pixel-exact extraction — there's no tool in this environment for
-# that) of a density-mapped image-to-ASCII render, so treat it as a close
-# approximation rather than a guaranteed exact match; swap
-# _MENU_ART_BASE for the original generator's text output directly if
-# exactness matters.
+# Mole mascot shown to the left of the top-level menu on a wide-enough
+# terminal (see tui_select_menu's art_active check) — a nod to tw93/mole,
+# whose interaction design this UI follows (see tui.sh's file header).
+# Two frames (blink) cycled every 200ms by tui_select_menu's tick loop.
 #
-# The top ~6 rows are the sun/glow disc and stay fixed; rows below that
-# are the water-reflection texture, which _menu_art_frame cyclically
-# rotates a few characters per frame to read as a shimmer rather than a
-# static block — cheap and low-risk since frame B is derived from frame
-# A programmatically instead of hand-duplicated (no risk of the two
-# drifting out of sync from a transcription slip).
-_MENU_ART_BASE=(
-'                {{{{{{{{{{{{{'
-'              ~{}}{{}}{{}}{{}}{{}}?'
-'        1{{{{{{{{{{{{{{{{{{{{{{{{~'
-'     )1)1)1)1)1)1)))))))))1)1)1)1)1)1(1'
-'    /\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'
-'   ////////////////////////////////////'
-'   rjrjrjrjrjrjrjjjjjjjjjjjjjrjrjrjrjrjrjrjrj'
-'  nxuunxuunxuunxuunxuuxxuunxuunxnuuxnuuxnuux'
-'  vcvcvcvcvcvcvcvcvcvcvcccvcvcvcvcvcvcvcvcvcvc~'
-' zzXYzzXYzzXYzzXYzzYYzzYYzzYYzzYXzzYXzzYXzzYXzzY'
-'UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU'
-'UUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU'
-'UUUUUUUUUUUUUUUUUUXYXXYUUUYzvczuuxucvuuzUXYX'
-')uvczXUzzzYUUUUUUUUUUUUUUYXYzvccvnvzUXUUUUU'
-'xv1[jnuvzzzvcncvzzuvzYUUUUXYXzvzXzvzYzzzYXYXz_'
-' ;\|/fxuuuxjtfjxxvvvvvvuxxf//\|tftjxvzYzzz_'
-'  :1\//frjrruuuuuuvzzzzzzzzzzvvuuxjrf/'
-'  \uvuuvuxrxvvvvuuuvvvvuuuuuuuuuczzUUXYzvvvvur'
-'     ]{{{{i      ?{{{{{{\{{{\1'
-'     //\{(//|((1{(|/tttt\||{1{1{{}{iI>'
-'     i()()(({{{{{1{(((((|///tjt/|(/(\(\)'
-'      ?[{{{{['
-'       {{{{{{{'
-)
-
-# _menu_art_frame <rotate-by> — prints one frame, water rows (index 6+)
-# left-rotated by <rotate-by> characters. Each line carries its own
-# color+reset rather than the block being wrapped once: _tui_render_with_art
-# splits a frame into separate array elements printed on different rows
-# interleaved with unrelated menu content, so relying on ANSI state to
-# "carry over" between them would be fragile and liable to bleed into the
-# menu column's own colors.
-_menu_art_frame() {
-  local shift=$1 i line len n
-  for i in "${!_MENU_ART_BASE[@]}"; do
-    line=${_MENU_ART_BASE[i]}
-    if (( i >= 6 )); then
-      len=${#line}
-      if (( len > 0 )); then
-        n=$(( shift % len ))
-        line="${line:n}${line:0:n}"
-      fi
-    fi
+# _menu_art_wrap colors each LINE individually rather than wrapping the
+# whole block once: _tui_render_with_art splits a frame apart into
+# separate array elements (one per line) and prints each on its own row
+# interleaved with unrelated menu content. A single leading color code
+# with the reset only at the very end would leave every line after the
+# first relying on ANSI state "carrying over" across other printf calls
+# in between — fragile and liable to bleed into or get clobbered by the
+# menu column's own colors. Each line closing its own color is the only
+# way that's safe.
+_menu_art_wrap() {
+  local line
+  while IFS= read -r line; do
     printf '%s%s%s\n' "$C_ORANGE" "$line" "$C_RESET"
   done
 }
 
-_menu_art_frame_a() { _menu_art_frame 0; }
-_menu_art_frame_b() { _menu_art_frame 3; }
+_menu_art_frame_a() {
+  _menu_art_wrap <<'EOF'
+    .-""""-.
+   /  o  o  \
+  |     <    |
+   \  '--'  /
+    '.____.'
+     /|  |\
+    ' |  | '
+      |  |
+    __|  |__
+EOF
+}
+
+_menu_art_frame_b() {
+  _menu_art_wrap <<'EOF'
+    .-""""-.
+   /  -  -  \
+  |     <    |
+   \  '--'  /
+    '.____.'
+     /|  |\
+    ' |  | '
+      |  |
+    __|  |__
+EOF
+}
 
 cmd_menu() {
   local header="clmac — macOS cleanup"

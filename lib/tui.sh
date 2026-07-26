@@ -321,21 +321,17 @@ tui_select_menu() {
   (( page_size > n )) && page_size=$n
 
   # Art setup: only enabled when a frames array was passed AND the
-  # terminal is both wide enough for both columns plus a gap, and tall
-  # enough for the art's own height (some frames — the menu's sunset art
-  # in particular — are considerably taller than the item list). art_width
-  # /art_height are the max across ALL frames (not just the current one)
-  # so the content column doesn't shift, or the active/inactive decision
-  # flip, as frames cycle.
+  # terminal is wide enough for both columns plus a gap. art_width is the
+  # widest line across ALL frames (not just the current one) so the
+  # content column doesn't shift left/right as frames cycle.
   local -a art_frames=()
   [[ -n "$art_var" ]] && { local -n _tsm_frames_ref=$art_var; art_frames=("${_tsm_frames_ref[@]}"); }
-  local art_gap=3 art_width=0 art_height=0 art_frame_idx=0
+  local art_gap=3 art_width=0 art_frame_idx=0
   if (( ${#art_frames[@]} > 0 )); then
     local -a _probe_lines
     local frame al w
     for frame in "${art_frames[@]}"; do
       mapfile -t _probe_lines <<< "$frame"
-      (( ${#_probe_lines[@]} > art_height )) && art_height=${#_probe_lines[@]}
       for al in "${_probe_lines[@]}"; do
         w=$(tui_visible_width "$al")
         (( w > art_width )) && art_width=$w
@@ -343,9 +339,7 @@ tui_select_menu() {
     done
   fi
   local art_active=0
-  if (( ${#art_frames[@]} > 0 && cols >= art_width + art_gap + 60 && rows >= art_height + 4 )); then
-    art_active=1
-  fi
+  (( ${#art_frames[@]} > 0 && cols >= art_width + art_gap + 60 )) && art_active=1
   local tick_timeout=""
   (( art_active )) && tick_timeout=0.2
 
