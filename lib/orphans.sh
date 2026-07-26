@@ -211,7 +211,7 @@ cmd_orphans() {
   done <<< "$chosen"
 
   printf '\n%s%s%s\n' "$C_DIM" "$(divider_eq 60)" "$C_RESET"
-  printf '%sFreed:%s %s%s%s\n' "$C_BOLD" "$C_RESET" "$C_GREEN" "$(human_size "$total_freed")" "$C_RESET"
+  printf '%sFreed:%s %s\n' "$C_BOLD" "$C_RESET" "$(human_size_c "$total_freed")"
   printf '%s%s%s\n' "$C_DIM" "$(divider_eq 60)" "$C_RESET"
 }
 

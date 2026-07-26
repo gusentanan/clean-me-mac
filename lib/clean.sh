@@ -173,25 +173,32 @@ EXAMPLES
 EOF
 }
 
+# _safe_label — colored "safe"/"care" tag for the currently-loaded
+# preset's PRESET_SAFE. Shared between _clean_list and _clean_interactive
+# so the two views can't drift out of sync the way "yes" vs "safe" had —
+# one used to say "yes", the other "safe", for the same underlying value.
+_safe_label() {
+  if [[ "${PRESET_SAFE:-false}" == "true" ]]; then
+    printf '%ssafe%s' "$C_GREEN" "$C_RESET"
+  else
+    printf '%s%scare%s' "$C_YELLOW" "$C_BOLD" "$C_RESET"
+  fi
+}
+
 _clean_list() {
   printf '\n%s%-22s %10s %-6s  %s%s\n' "$C_BOLD" "PRESET" "SIZE" "SAFE" "DESCRIPTION" "$C_RESET"
   printf '%s%s%s\n' "$C_DIM" "$(divider_dash 90)" "$C_RESET"
   spinner_start
   local out
   out=$(
-    local f safe_label sz
+    local f sz
     while IFS= read -r f; do
       _load_preset "$f"
       sz=$(_preset_current_size)
-      if [[ "${PRESET_SAFE:-false}" == "true" ]]; then
-        safe_label="${C_GREEN}yes${C_RESET}"
-      else
-        safe_label="${C_YELLOW}care${C_RESET}"
-      fi
-      printf '%s%-22s%s %s %b   %s%s%s\n' \
+      printf '%s%-22s%s %s %s   %s%s%s\n' \
         "$C_CYAN" "$PRESET_NAME" "$C_RESET" \
         "$(human_size_padded "$sz" 10)" \
-        "$safe_label" \
+        "$(_safe_label)" \
         "$C_DIM" "$PRESET_DESC" "$C_RESET"
     done < <(_list_preset_files)
   )
@@ -205,10 +212,9 @@ _clean_interactive() {
   local -a items=()
   while IFS= read -r f; do
     _load_preset "$f"
-    local sz safe
+    local sz
     sz=$(_preset_current_size)
-    if [[ "${PRESET_SAFE:-false}" == "true" ]]; then safe="safe"; else safe="care"; fi
-    items+=("$(printf '%-22s %10s  [%s]  %s' "$PRESET_NAME" "$(human_size "$sz")" "$safe" "$PRESET_DESC")")
+    items+=("$(printf '%-22s %s  [%s]  %s' "$PRESET_NAME" "$(human_size_padded "$sz" 10)" "$(_safe_label)" "$PRESET_DESC")")
   done < <(_list_preset_files)
   spinner_stop
 
@@ -305,7 +311,7 @@ _run_preset() {
   after_h=$(human_size "$after")
   freed=$(( before - after ))
   printf '%s%s%s\n' "$C_DIM" "$(divider_eq 60)" "$C_RESET"
-  printf '%sFreed:%s %s%s%s\n' "$C_BOLD" "$C_RESET" "$C_GREEN" "$(human_size "$freed")" "$C_RESET"
+  printf '%sFreed:%s %s\n' "$C_BOLD" "$C_RESET" "$(human_size_c "$freed")"
   printf '%s%s%s\n\n' "$C_DIM" "$(divider_eq 60)" "$C_RESET"
 }
 

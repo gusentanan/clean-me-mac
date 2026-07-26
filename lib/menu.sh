@@ -14,6 +14,21 @@ doctor|One-screen health summary
 EOF
 }
 
+# Per-key color so the six menu entries are distinguishable at a glance
+# rather than reading as one undifferentiated block of white text. Keyed
+# by the same name used as _menu_items' first column and the picker's
+# payload — declared at file scope (not inside a function) since the
+# C_* vars are only ever set once, by common.sh, well before menu.sh's
+# own functions run.
+declare -A _MENU_KEY_COLORS=(
+  [scan]="$C_BLUE"
+  [explore]="$C_CYAN"
+  [system]="$C_MAGENTA"
+  [orphans]="$C_RED"
+  [clean]="$C_GREEN"
+  [doctor]="$C_PURPLE"
+)
+
 # Big block-letter "CLMAC" wordmark printed above the menu — same idea as
 # omarchy's installer TUI (a large chunky pixel-font logo over the
 # form/content). Follows omarchy's specific letterform conventions as
@@ -66,7 +81,14 @@ cmd_menu() {
     local rows="" name desc chosen
     while IFS='|' read -r name desc; do
       [[ -z "$name" ]] && continue
-      rows+="$(printf '%-10s %s' "$name" "$desc")"$'\t'"${name}"$'\n'
+      # Pad the plain name to width FIRST, then wrap in color — ANSI
+      # codes don't count toward printf's %-Ns width, so coloring before
+      # padding would throw the column alignment off (same reasoning as
+      # human_size_padded in common.sh).
+      local padded_name key_color
+      padded_name=$(printf '%-10s' "$name")
+      key_color=${_MENU_KEY_COLORS[$name]:-$C_RESET}
+      rows+="${key_color}${padded_name}${C_RESET} ${desc}"$'\t'"${name}"$'\n'
     done < <(_menu_items)
 
     # NOTE: chosen=$(...) runs select_menu in a subshell, so a variable it
