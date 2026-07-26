@@ -21,22 +21,9 @@ equivalent bash implementation automatically.
 
 ## Screenshots
 
-> **Note:** the screenshots below predate the raw-terminal UI rewrite and
-> still show the old `fzf`-boxed picker — regenerating them needs a live
-> terminal session, which wasn't available while making this change.
-> Treat them as stale until refreshed.
+### `clmac` — interactive menu
 
-### `clmac scan` — categorized disk usage
-
-![clmac scan — disk usage by category, with sizes colored by magnitude](docs/scan.png)
-
-### `clmac orphans` — find leftover app data
-
-![clmac orphans — picker showing app data with no matching installed app](docs/orphans.png)
-
-### `clmac clean` — interactive preset picker
-
-![clmac clean — raw-terminal checkbox picker for cleanup presets](docs/clean-picker.png)
+![clmac's interactive menu: a block-letter CLMAC wordmark above a color-coded list of commands](docs/menu.png)
 
 ---
 
