@@ -25,6 +25,26 @@ Volumes|/Volumes
 EOF
 }
 
+# Serializes _explore_root_defs into the "Label:Path|Label:Path" form the
+# Go binary's --roots flag expects — kept as a conversion here so the
+# roots stay single-sourced in _explore_root_defs rather than duplicated
+# in cmd/explore/main.go.
+_explore_roots_flag() {
+  local name path out=""
+  while IFS='|' read -r name path; do
+    [[ -z "$name" ]] && continue
+    [[ -e "$path" ]] || continue
+    [[ -n "$out" ]] && out+="|"
+    out+="${name}:${path}"
+  done < <(_explore_root_defs)
+  printf '%s' "$out"
+}
+
+# cmd_explore — execs the compiled bar-chart explorer (cmd/explore, built
+# via `make build`) when it's present and there's a real terminal to run
+# it on; otherwise falls back to _explore_bash_fallback below, which is a
+# complete implementation on its own — the Go binary is an enhancement,
+# not a requirement.
 cmd_explore() {
   while (( $# > 0 )); do
     case "$1" in
@@ -34,6 +54,16 @@ cmd_explore() {
     shift
   done
 
+  local bin="$CMM_DIR/bin/clmac-explore"
+  if [[ -x "$bin" ]] && [[ -t 2 ]] && { : </dev/tty; } 2>/dev/null; then
+    "$bin" --roots "$(_explore_roots_flag)"
+    return $?
+  fi
+
+  _explore_bash_fallback
+}
+
+_explore_bash_fallback() {
   while true; do
     local chosen rc
     chosen=$(_explore_roots_screen)

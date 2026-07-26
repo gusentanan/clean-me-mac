@@ -10,11 +10,21 @@ doesn't:
 3. **What's safe to delete right now?** — curated presets for caches that
    regenerate (`huggingface`, `gradle`, `npm`, `pnpm`, `yarn`, Xcode DerivedData, …).
 
-Pure Bash 5, optional `fzf` for nicer UI, no Go runtime.
+Pure Bash 5 with a hand-rolled raw-terminal picker UI (no `fzf` dependency),
+in the borderless, `▶`/`☐`/`☑` style of [tw93/mole](https://github.com/tw93/mole)
+— credit to that project for the interaction design this follows. `clmac
+explore`'s bar-chart drill-down optionally builds a small Go+Bubbletea
+component for a smoother analyzer; without Go installed it falls back to an
+equivalent bash implementation automatically.
 
 ---
 
 ## Screenshots
+
+> **Note:** the screenshots below predate the raw-terminal UI rewrite and
+> still show the old `fzf`-boxed picker — regenerating them needs a live
+> terminal session, which wasn't available while making this change.
+> Treat them as stale until refreshed.
 
 ### `clmac scan` — categorized disk usage
 
@@ -26,7 +36,7 @@ Pure Bash 5, optional `fzf` for nicer UI, no Go runtime.
 
 ### `clmac clean` — interactive preset picker
 
-![clmac clean — fzf-powered picker for cleanup presets](docs/clean-picker.png)
+![clmac clean — raw-terminal checkbox picker for cleanup presets](docs/clean-picker.png)
 
 ---
 
@@ -35,12 +45,12 @@ Pure Bash 5, optional `fzf` for nicer UI, no Go runtime.
 ```sh
 # Requirements
 brew install bash jq       # bash 5 + jq required
-brew install fzf           # optional but recommended
+brew install go            # optional — builds the enhanced `clmac explore` analyzer
 
 # Clone and install
-git clone https://github.com/bagusmerta/clean-me-mac.git
+git clone https://github.com/gusentanan/clean-me-mac.git
 cd clean-me-mac
-./install.sh               # symlinks to /opt/homebrew/bin/clmac
+./install.sh               # symlinks to /opt/homebrew/bin/clmac, builds clmac-explore if Go is present
 ```
 
 ## Commands
@@ -146,14 +156,19 @@ clmac doctor
 ```
 clean-me-mac/
 ├── clmac                   entrypoint
-├── install.sh              symlinks into /opt/homebrew/bin
+├── install.sh              symlinks into /opt/homebrew/bin, builds cmd/explore if Go is present
+├── Makefile                `make build` — builds bin/clmac-explore
+├── go.mod                  Go module for cmd/explore (optional component)
+├── cmd/
+│   └── explore/            Go+Bubbletea bar-chart disk analyzer (clmac explore's enhanced path)
 ├── lib/
-│   ├── common.sh           colors, size helpers, confirm, safe_rm
-│   ├── ui.sh               select_multi/select_menu (fzf or numbered fallback)
+│   ├── common.sh           colors, icons, size helpers, confirm, safe_rm
+│   ├── tui.sh               raw-terminal picker engine (▶ pointer, ☐/☑ checkboxes, no fzf)
+│   ├── ui.sh               select_multi/select_menu — dispatches to tui.sh or a numbered fallback
 │   ├── apps.sh             bundle ID resolution
 │   ├── menu.sh             cmd_menu — top-level interactive launcher
 │   ├── scan.sh             cmd_scan
-│   ├── explore.sh          cmd_explore — bar-chart drill-down browser
+│   ├── explore.sh          cmd_explore — execs the Go analyzer, or a bash bar-chart fallback
 │   ├── orphans.sh          cmd_orphans
 │   ├── clean.sh            cmd_clean + preset loader
 │   └── doctor.sh           cmd_doctor

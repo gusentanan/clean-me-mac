@@ -98,6 +98,13 @@ render_bar() {
   printf '%s%s%s' "$color" "$bar" "$C_RESET"
 }
 
+# divider_eq/divider_dash [width] — repeated-character rules. divider_eq is
+# the mole-style "====...====" completion-summary rule (doctor's header
+# divider and clean/orphans' "Freed:" blocks); divider_dash is the lighter
+# "----...----" rule used for table separators.
+divider_eq()   { local w=${1:-50} i s=""; for (( i=0; i<w; i++ )); do s+="="; done; printf '%s' "$s"; }
+divider_dash() { local w=${1:-60} i s=""; for (( i=0; i<w; i++ )); do s+="-"; done; printf '%s' "$s"; }
+
 log_info()    { [[ "$CMM_JSON" -eq 1 ]] && return 0; printf '%s\n' "$*" >&2; }
 log_success() { [[ "$CMM_JSON" -eq 1 ]] && return 0; printf '  %s%s%s %s\n' "$C_GREEN" "$ICON_SUCCESS" "$C_RESET" "$*" >&2; }
 log_warn()    { printf '%s%s %s%s\n' "$C_YELLOW" "$ICON_WARNING" "$*" "$C_RESET" >&2; }

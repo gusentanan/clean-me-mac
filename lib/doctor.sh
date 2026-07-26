@@ -11,7 +11,7 @@ cmd_doctor() {
   done
 
   printf '\n%s%sclmac doctor%s\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
-  printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s=' {1..50})" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_eq)" "$C_RESET"
 
   _doctor_disk
   _doctor_top_home

@@ -156,7 +156,7 @@ _scan_table() {
 
   # Totals per category
   printf '%s%-22s %12s%s\n' "$C_BOLD" "CATEGORY" "SIZE" "$C_RESET"
-  printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..40})" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 40)" "$C_RESET"
 
   # Sort categories by their total size desc. Guard against empty keys
   # (a trailing newline in $rows can produce a phantom "" key in awk).
@@ -171,7 +171,7 @@ _scan_table() {
     printf '%-22s %s\n' "$cat" "$(human_size_padded "$bytes" 12)"
     grand=$(( grand + bytes ))
   done <<< "$totals"
-  printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..40})" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 40)" "$C_RESET"
   printf '%s%-22s %s%s\n\n' \
     "$C_BOLD" "TOTAL" \
     "$(printf '%s%12s%s' "$C_BOLD$C_MAGENTA" "$(human_size "$grand")" "$C_RESET")" \
@@ -180,7 +180,7 @@ _scan_table() {
   # Detail listing, sorted by bytes desc within each category.
   printf '%s%sTop items%s\n\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
   printf '%s%-22s %12s  %s%s\n' "$C_BOLD" "CATEGORY" "SIZE" "PATH" "$C_RESET"
-  printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..90})" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 90)" "$C_RESET"
 
   # Detail rows. awk filter avoids the same phantom-empty-row problem.
   awk -F'\t' 'NF >= 3 && $1 != "" { print }' <<< "$rows" \
@@ -194,7 +194,7 @@ _scan_table() {
         "$cat" "$(human_size_padded "$bytes" 12)" \
         "$C_DIM" "$short" "$C_RESET"
     done
-  printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..90})" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 90)" "$C_RESET"
   printf '%sNote: scan only covers $HOME paths. Run %s%sclmac system%s%s to explain the gap\n' \
     "$C_DIM" "$C_RESET" "$C_CYAN" "$C_RESET" "$C_DIM"
   printf 'between this total and macOS Storage settings ("System Data", "macOS").%s\n\n' "$C_RESET"

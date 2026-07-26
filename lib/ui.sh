@@ -1,34 +1,34 @@
 #!/opt/homebrew/bin/bash
-# Interactive selection UI. Uses fzf when available, falls back to numbered menu.
+# Interactive selection UI. Draws with the hand-rolled raw-terminal picker
+# in lib/tui.sh when a real terminal is available, falls back to a
+# pure-bash numbered menu otherwise (no tty attached at all — CI, a
+# detached session, etc).
+source "$CMM_LIB/tui.sh"
 
-# Shared fzf color theme — ANSI-256 indices matching the palette in
-# common.sh (2=green 4=blue 5=magenta/purple 6=cyan 8=gray), so fzf's own
-# chrome (borders, headers, matches, pointer) reads as one system with
-# clmac's printf-colored output instead of fzf's stock blue/green.
-# tw93/mole-style: bold current line, purple match highlight, cyan pointer.
-CMM_FZF_COLOR='fg+:bold,hl:5,hl+:5:bold,pointer:6:bold,marker:2:bold,header:4:bold,border:8,prompt:6:bold,info:8,label:4:bold'
+# _ui_interactive — true if there's a real terminal to draw the picker on.
+# select_multi/select_menu are always invoked as `items | select_multi ...`
+# (every call site in this repo does this — see the items=$(cat) below),
+# which means fd 0 and fd 1 are bound to pipe/command-substitution
+# plumbing at the point this runs, NOT the terminal. stderr (fd 2) is the
+# one fd that's still connected straight through — same test the spinner
+# in common.sh already relies on — so that's what has to be checked, not
+# -t 0 / -t 1.
+_ui_interactive() {
+  [[ -t 2 ]] && { : </dev/tty; } 2>/dev/null
+}
 
 # select_multi
 # Reads items from stdin (one per line) and writes selected items to stdout.
 # Args:
 #   $1 = prompt header (shown above the picker)
 select_multi() {
-  local header=${1:-"Select items (Tab to multi-select, Enter to confirm)"}
+  local header=${1:-"Select items (Space to toggle, Enter to confirm)"}
   local items
   items=$(cat)
   [[ -z "$items" ]] && return 0
 
-  if command -v fzf >/dev/null 2>&1; then
-    printf '%s\n' "$items" | fzf \
-      --multi \
-      --header="$header" \
-      --height=60% \
-      --reverse \
-      --border \
-      --color="$CMM_FZF_COLOR" \
-      --pointer="➤" \
-      --marker="✓ " \
-      --prompt="❯ "
+  if _ui_interactive; then
+    tui_select_multi "$header" "$items"
   else
     _select_multi_fallback "$header" "$items"
   fi
@@ -93,38 +93,17 @@ _select_multi_fallback() {
 # Prints the chosen row's payload on stdout. Sets CMM_MENU_QUIT=1 and
 # returns 130 if the user quit (q / Ctrl-C) rather than just cancelling
 # this one level (blank/Esc, return 1).
+#
+# border_label is accepted for call-site compatibility with the old
+# fzf-box-label signature but unused — there's no box to label anymore.
 select_menu() {
   local header=$1 footer=$2 label=${3:-" clmac "}
   local items
   items=$(cat)
   [[ -z "$items" ]] && return 1
 
-  if command -v fzf >/dev/null 2>&1; then
-    local out rc
-    out=$(printf '%s\n' "$items" | fzf \
-      --ansi \
-      --delimiter=$'\t' --with-nth=1 \
-      --header="$header" \
-      --header-first \
-      --footer="$footer" \
-      --footer-border \
-      --border \
-      --border-label="$label" \
-      --height=100% \
-      --reverse \
-      --color="$CMM_FZF_COLOR" \
-      --pointer="➤" \
-      --prompt="❯ " \
-      --bind='q:abort,ctrl-c:abort' \
-      --no-multi)
-    rc=$?
-    if (( rc == 130 )); then
-      CMM_MENU_QUIT=1
-      return 130
-    fi
-    [[ -z "$out" ]] && return 1
-    printf '%s\n' "${out##*$'\t'}"
-    return 0
+  if _ui_interactive; then
+    tui_select_menu "$header" "$footer" "$label" "$items"
   else
     _select_menu_fallback "$header" "$footer" "$items"
   fi
@@ -160,40 +139,4 @@ _select_menu_fallback() {
     return 0
   fi
   return 1
-}
-
-# select_one — pick one item from stdin.
-select_one() {
-  local header=${1:-"Select one"}
-  local items
-  items=$(cat)
-  [[ -z "$items" ]] && return 0
-
-  if command -v fzf >/dev/null 2>&1; then
-    printf '%s\n' "$items" | fzf \
-      --header="$header" \
-      --height=60% \
-      --reverse \
-      --border \
-      --color="$CMM_FZF_COLOR" \
-      --pointer="➤" \
-      --prompt="❯ "
-  else
-    local -a arr
-    mapfile -t arr <<< "$items"
-    local n=${#arr[@]} i
-    printf '%s\n' "$header" >&2
-    for (( i=0; i<n; i++ )); do
-      printf '  %2d. %s\n' "$((i+1))" "${arr[i]}" >&2
-    done
-    printf 'Enter number (blank to cancel): ' >&2
-    # See _select_multi_fallback: fd 0 here is the internal rows pipe,
-    # not the terminal — read from /dev/tty directly.
-    local reply
-    read -r reply </dev/tty
-    [[ -z "$reply" ]] && return 0
-    if [[ "$reply" =~ ^[0-9]+$ ]] && (( reply >= 1 && reply <= n )); then
-      printf '%s\n' "${arr[reply-1]}"
-    fi
-  fi
 }

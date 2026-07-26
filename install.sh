@@ -31,12 +31,18 @@ else
   green "✓"; echo " jq found"
 fi
 
-# 3. fzf check (optional).
-if ! command -v fzf >/dev/null 2>&1; then
-  yellow "!"; echo " fzf not installed (optional — numbered menu will be used)"
-  echo "  For better UX: brew install fzf"
+# 3. Go (optional) — builds the enhanced bar-chart `clmac explore`.
+# Without it, explore falls back to a bash implementation automatically.
+if command -v go >/dev/null 2>&1; then
+  green "✓"; echo " Go found — building clmac explore..."
+  if ( cd "$SCRIPT_DIR" && go build -ldflags="-s -w" -o bin/clmac-explore ./cmd/explore ) 2>/dev/null; then
+    green "✓"; echo " Built bin/clmac-explore"
+  else
+    yellow "!"; echo " Go build failed — clmac explore will use its bash fallback"
+  fi
 else
-  green "✓"; echo " fzf found"
+  yellow "!"; echo " Go not installed (optional — clmac explore will use its bash fallback)"
+  echo "  For the bar-chart explorer: brew install go && (cd \"$SCRIPT_DIR\" && make build)"
 fi
 
 # 4. Symlink.

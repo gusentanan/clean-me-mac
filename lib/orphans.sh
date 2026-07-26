@@ -194,7 +194,7 @@ cmd_orphans() {
   done <<< "$rows"
 
   local chosen
-  chosen=$(printf '%s\n' "${picker_items[@]}" | select_multi "Pick orphans to delete (Tab multi-select, Enter confirm)")
+  chosen=$(printf '%s\n' "${picker_items[@]}" | select_multi "Pick orphans to delete")
   [[ -z "$chosen" ]] && { log_info "Nothing selected."; return 0; }
 
   # Delete chosen paths.
@@ -210,7 +210,9 @@ cmd_orphans() {
     total_freed=$(( total_freed + sz ))
   done <<< "$chosen"
 
-  printf '\n%s%sFreed: %s%s\n' "$C_BOLD" "$C_GREEN" "$(human_size "$total_freed")" "$C_RESET"
+  printf '\n%s%s%s\n' "$C_DIM" "$(divider_eq 60)" "$C_RESET"
+  printf '%sFreed:%s %s%s%s\n' "$C_BOLD" "$C_RESET" "$C_GREEN" "$(human_size "$total_freed")" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_eq 60)" "$C_RESET"
 }
 
 # Container roots are protected; delete only Data/Bottles inside them.
@@ -231,7 +233,7 @@ _orphans_table() {
   printf '\n%s%sOrphans%s %s(no matching installed app)%s\n\n' \
     "$C_BOLD" "$C_RED" "$C_RESET" "$C_DIM" "$C_RESET"
   printf '%s%10s  %-40s  %s%s\n' "$C_BOLD" "SIZE" "BUNDLE ID" "PATH" "$C_RESET"
-  printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..100})" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 100)" "$C_RESET"
   while IFS=$'\t' read -r sz id path; do
     [[ -z "$path" ]] && continue
     printf '%s  %s%-40s%s  %s%s%s\n' \

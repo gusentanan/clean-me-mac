@@ -175,7 +175,7 @@ EOF
 
 _clean_list() {
   printf '\n%s%-22s %10s %-6s  %s%s\n' "$C_BOLD" "PRESET" "SIZE" "SAFE" "DESCRIPTION" "$C_RESET"
-  printf '%s%s%s\n' "$C_DIM" "$(printf '%.0s-' {1..90})" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_dash 90)" "$C_RESET"
   spinner_start
   local out
   out=$(
@@ -213,7 +213,7 @@ _clean_interactive() {
   spinner_stop
 
   local chosen
-  chosen=$(printf '%s\n' "${items[@]}" | select_multi "Pick preset(s) to clean (Tab multi-select, Enter confirm)")
+  chosen=$(printf '%s\n' "${items[@]}" | select_multi "Pick preset(s) to clean")
   [[ -z "$chosen" ]] && { log_info "Nothing selected."; return 0; }
 
   # Extract preset name (first column).
@@ -304,9 +304,9 @@ _run_preset() {
   after=$(_preset_current_size)
   after_h=$(human_size "$after")
   freed=$(( before - after ))
-  printf '  %s%sFreed:%s %s%s%s\n' \
-    "$C_BOLD" "$C_GREEN" "$C_RESET" \
-    "$C_GREEN" "$(human_size "$freed")" "$C_RESET"
+  printf '%s%s%s\n' "$C_DIM" "$(divider_eq 60)" "$C_RESET"
+  printf '%sFreed:%s %s%s%s\n' "$C_BOLD" "$C_RESET" "$C_GREEN" "$(human_size "$freed")" "$C_RESET"
+  printf '%s%s%s\n\n' "$C_DIM" "$(divider_eq 60)" "$C_RESET"
 }
 
 # Empty all entries inside a directory without removing the directory itself.
