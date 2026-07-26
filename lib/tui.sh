@@ -24,6 +24,16 @@
 tui_hide_cursor() { printf '\033[?25l' >&2; }
 tui_show_cursor() { printf '\033[?25h' >&2; }
 
+# tui_clear_screen — home cursor, clear the visible viewport (\033[2J), AND
+# clear scrollback (\033[3J, xterm's "erase saved lines" extension). Many
+# terminals (iTerm2, Terminal.app, VS Code, most VTE-based ones) keep their
+# own scroll history *inside* the alternate screen buffer too — \033[2J
+# alone only wipes what's currently visible, so a long report's overflow
+# stays reachable by scrolling up even though nothing left alt-screen.
+# \033[3J is what `clear`/`tput clear` emit on modern terminfo databases
+# for exactly this reason; unsupported terminals just ignore it.
+tui_clear_screen() { printf '\033[H\033[2J\033[3J' >&2; }
+
 # tui_enter_alt/tui_leave_alt are gated on CMM_TUI_ALT_ACTIVE rather than
 # calling tput smcup/rmcup unconditionally on every picker invocation.
 # Without this, `clmac` (the interactive menu) would enter/leave the
@@ -46,6 +56,7 @@ tui_enter_alt() {
   (( CMM_TUI_ALT_ACTIVE )) && return 0
   command -v tput >/dev/null 2>&1 && tput smcup >&2 2>/dev/null
   CMM_TUI_ALT_ACTIVE=1
+  tui_clear_screen
   return 0
 }
 tui_leave_alt() {
@@ -264,7 +275,7 @@ tui_select_menu() {
 
   _tui_arm_traps
   tui_enter_alt; tui_raw_on; tui_hide_cursor
-  printf '\033[2J\033[H' >&2
+  tui_clear_screen
 
   local rc=130 result=""
   while true; do
@@ -337,7 +348,7 @@ tui_select_multi() {
 
   _tui_arm_traps
   tui_enter_alt; tui_raw_on; tui_hide_cursor
-  printf '\033[2J\033[H' >&2
+  tui_clear_screen
 
   local rc=1
   while true; do

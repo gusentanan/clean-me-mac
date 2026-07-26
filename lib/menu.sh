@@ -49,8 +49,11 @@ cmd_menu() {
     [[ -z "$chosen" ]] && return 0
 
     # Clear before dispatching so each action starts on a blank frame
-    # instead of drawing over whatever the picker last had on screen.
-    printf '\033[2J\033[H' >&2
+    # instead of drawing over whatever the picker last had on screen —
+    # tui_clear_screen (not a plain \033[2J) also drops whatever
+    # scrollback the terminal kept inside the alt-screen buffer itself,
+    # which a visible-viewport-only clear leaves scrollable-into.
+    tui_clear_screen
 
     # scan/system/doctor/orphans/clean print report output; pause for a
     # keypress before looping back so it's actually readable.
