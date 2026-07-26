@@ -18,6 +18,20 @@ cmd_menu() {
   local header="clmac — macOS cleanup"
   local footer="↑↓ Navigate | ⏎ Select | Q Quit"
 
+  # Own one alt-screen for the entire interactive session instead of
+  # letting each picker call open/close its own. Without this, every
+  # report command (scan/doctor/system) printed its plain-text output to
+  # the PRIMARY screen in the gap between two alt-screen picker frames —
+  # invisible while the menu was showing, but still sitting in real
+  # terminal scrollback, which is exactly what a user scrolling up would
+  # find. Keeping one alt-screen open for the whole session (like
+  # vim/htop/less do) means nothing any action prints ever touches
+  # scrollback; only the terminal state from before `clmac` was launched
+  # comes back when the session ends. tui_select_menu/tui_select_multi's
+  # own enter/leave calls become no-ops while this is active (tui.sh).
+  tui_enter_alt
+  trap 'tui_leave_alt' RETURN
+
   while true; do
     local rows="" name desc chosen
     while IFS='|' read -r name desc; do
@@ -34,14 +48,26 @@ cmd_menu() {
     (( rc == 130 )) && return 0
     [[ -z "$chosen" ]] && return 0
 
-    # scan/system/doctor/orphans/clean print report output on the main
-    # screen; looping straight back into select_menu switches to the alt
-    # screen immediately and hides it before it can be read, so pause for
-    # a keypress first. explore is skipped — it's its own interactive
-    # session and the user already chose to quit out of it.
+    # Clear before dispatching so each action starts on a blank frame
+    # instead of drawing over whatever the picker last had on screen.
+    printf '\033[2J\033[H' >&2
+
+    # scan/system/doctor/orphans/clean print report output; pause for a
+    # keypress before looping back so it's actually readable.
     case "$chosen" in
       scan)    source "$CMM_LIB/scan.sh";    cmd_scan;    press_any_key ;;
-      explore) source "$CMM_LIB/explore.sh"; cmd_explore ;;
+      explore)
+        # explore may exec a separate Go binary (cmd/explore) with its own
+        # independent alt-screen lifecycle (tea.WithAltScreen) rather than
+        # bash's managed one — its rmcup on exit would desync our
+        # CMM_TUI_ALT_ACTIVE flag from the terminal's real state if we
+        # left our alt-screen "active" underneath it. Hand it a clean
+        # terminal instead and reclaim alt-screen once it's back.
+        source "$CMM_LIB/explore.sh"
+        tui_leave_alt
+        cmd_explore
+        tui_enter_alt
+        ;;
       system)  source "$CMM_LIB/system.sh";  cmd_system;  press_any_key ;;
       orphans) source "$CMM_LIB/orphans.sh"; cmd_orphans; press_any_key ;;
       clean)   source "$CMM_LIB/clean.sh";   cmd_clean;   press_any_key ;;

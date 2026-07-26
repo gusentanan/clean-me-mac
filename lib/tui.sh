@@ -24,8 +24,36 @@
 tui_hide_cursor() { printf '\033[?25l' >&2; }
 tui_show_cursor() { printf '\033[?25h' >&2; }
 
-tui_enter_alt() { command -v tput >/dev/null 2>&1 && tput smcup >&2 2>/dev/null; return 0; }
-tui_leave_alt() { command -v tput >/dev/null 2>&1 && tput rmcup >&2 2>/dev/null; return 0; }
+# tui_enter_alt/tui_leave_alt are gated on CMM_TUI_ALT_ACTIVE rather than
+# calling tput smcup/rmcup unconditionally on every picker invocation.
+# Without this, `clmac` (the interactive menu) would enter/leave the
+# alternate screen once per action: each report command (scan/doctor/
+# system) prints its plain-text output to the PRIMARY screen between two alt-screen
+# picker frames, which pollutes real scrollback — the "past command
+# results" a user scrolling up in their terminal would see are exactly
+# that leaked primary-screen output. cmd_menu instead enters alt-screen
+# once for the whole session (see menu.sh) and every report command's
+# plain printf output lands inside that same alternate buffer, which
+# leaves zero scrollback residue once the session ends and the terminal
+# is restored — the same reason vim/htop/less use alt-screen at all.
+#
+# Direct one-shot use (`clmac scan` from a normal shell prompt, no menu)
+# never sets the flag, so tui_select_menu/tui_select_multi still toggle
+# alt-screen per call exactly as before — you want a report you ran
+# directly to stay in your scrollback.
+CMM_TUI_ALT_ACTIVE=0
+tui_enter_alt() {
+  (( CMM_TUI_ALT_ACTIVE )) && return 0
+  command -v tput >/dev/null 2>&1 && tput smcup >&2 2>/dev/null
+  CMM_TUI_ALT_ACTIVE=1
+  return 0
+}
+tui_leave_alt() {
+  (( CMM_TUI_ALT_ACTIVE )) || return 0
+  command -v tput >/dev/null 2>&1 && tput rmcup >&2 2>/dev/null
+  CMM_TUI_ALT_ACTIVE=0
+  return 0
+}
 
 TUI_SAVED_STTY=""
 tui_raw_on() {
