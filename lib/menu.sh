@@ -14,59 +14,9 @@ doctor|One-screen health summary
 EOF
 }
 
-# Mole mascot shown to the left of the top-level menu on a wide-enough
-# terminal (see tui_select_menu's art_active check) — a nod to tw93/mole,
-# whose interaction design this UI follows (see tui.sh's file header).
-# Two frames (blink) cycled every 200ms by tui_select_menu's tick loop.
-#
-# _menu_art_wrap colors each LINE individually rather than wrapping the
-# whole block once: _tui_render_with_art splits a frame apart into
-# separate array elements (one per line) and prints each on its own row
-# interleaved with unrelated menu content. A single leading color code
-# with the reset only at the very end would leave every line after the
-# first relying on ANSI state "carrying over" across other printf calls
-# in between — fragile and liable to bleed into or get clobbered by the
-# menu column's own colors. Each line closing its own color is the only
-# way that's safe.
-_menu_art_wrap() {
-  local line
-  while IFS= read -r line; do
-    printf '%s%s%s\n' "$C_ORANGE" "$line" "$C_RESET"
-  done
-}
-
-_menu_art_frame_a() {
-  _menu_art_wrap <<'EOF'
-    .-""""-.
-   /  o  o  \
-  |     <    |
-   \  '--'  /
-    '.____.'
-     /|  |\
-    ' |  | '
-      |  |
-    __|  |__
-EOF
-}
-
-_menu_art_frame_b() {
-  _menu_art_wrap <<'EOF'
-    .-""""-.
-   /  -  -  \
-  |     <    |
-   \  '--'  /
-    '.____.'
-     /|  |\
-    ' |  | '
-      |  |
-    __|  |__
-EOF
-}
-
 cmd_menu() {
   local header="clmac — macOS cleanup"
   local footer="↑↓ Navigate | ⏎ Select | Q Quit"
-  local -a CMM_MENU_ART_FRAMES=("$(_menu_art_frame_a)" "$(_menu_art_frame_b)")
 
   # Own one alt-screen for the entire interactive session instead of
   # letting each picker call open/close its own. Without this, every
@@ -93,7 +43,7 @@ cmd_menu() {
     # sets (CMM_MENU_QUIT) would NOT propagate back here — only the exit
     # code survives the command-substitution boundary. Key off $? instead.
     local rc
-    chosen=$(printf '%s' "$rows" | select_menu "$header" "$footer" " clmac " CMM_MENU_ART_FRAMES)
+    chosen=$(printf '%s' "$rows" | select_menu "$header" "$footer" " clmac ")
     rc=$?
     (( rc == 130 )) && return 0
     [[ -z "$chosen" ]] && return 0

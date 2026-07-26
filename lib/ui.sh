@@ -83,7 +83,7 @@ _select_multi_fallback() {
   done
 }
 
-# select_menu <header> <footer> [border_label] [art_frames_var]
+# select_menu <header> <footer> [border_label]
 # Reads TSV rows "<display>\t<payload>" from stdin. Unlike select_one/
 # select_multi (which parse the chosen line back apart via whitespace
 # tokens), select_menu returns the payload column verbatim — safe for
@@ -96,19 +96,14 @@ _select_multi_fallback() {
 #
 # border_label is accepted for call-site compatibility with the old
 # fzf-box-label signature but unused — there's no box to label anymore.
-#
-# art_frames_var, if given, names an array of ASCII-art animation frames
-# drawn to the left of the list on a wide-enough terminal (see menu.sh).
-# Forwarded to tui_select_menu's interactive path only — the numbered
-# fallback ignores it, there's no room to spare in a plain scroll list.
 select_menu() {
-  local header=$1 footer=$2 label=${3:-" clmac "} art_var=${4:-}
+  local header=$1 footer=$2 label=${3:-" clmac "}
   local items
   items=$(cat)
   [[ -z "$items" ]] && return 1
 
   if _ui_interactive; then
-    tui_select_menu "$header" "$footer" "$label" "$items" "$art_var"
+    tui_select_menu "$header" "$footer" "$label" "$items"
   else
     _select_menu_fallback "$header" "$footer" "$items"
   fi
