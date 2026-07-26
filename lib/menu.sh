@@ -15,20 +15,25 @@ EOF
 }
 
 # Big block-letter "CLMAC" wordmark printed above the menu — same idea as
-# omarchy's installer TUI (a large logo banner over the form/content), one
-# static block of text, no animation. Each row prints as its own line (no
-# side-by-side column-pairing needed here, unlike the reverted left-panel
-# attempt), so there's no risk of the "color state bleeding across
-# separately-printed lines" bug that mattered there — still wrapping each
-# line in its own color+reset anyway since that's cheap and one less thing
-# to get wrong if this ever gets reused elsewhere.
+# omarchy's installer TUI (a large chunky pixel-font logo over the
+# form/content). Bold double-width strokes rather than thin 1px lines, in
+# that spirit, though this is an original glyph design, not a
+# reproduction of omarchy's actual (bespoke, serif-footed) typeface — I
+# don't have that font's source, only a screenshot to eyeball.
+#
+# One static block of text, no animation. Each row prints as its own line
+# (no side-by-side column-pairing needed here, unlike the reverted
+# left-panel attempt), so there's no risk of the "color state bleeding
+# across separately-printed lines" bug that mattered there — still
+# wrapping each line in its own color+reset anyway since that's cheap and
+# one less thing to get wrong if this ever gets reused elsewhere.
 _menu_banner() {
-  local -a letter_c=(' ████' '█    ' '█    ' '█    ' '█    ' '█    ' ' ████')
-  local -a letter_l=('█    ' '█    ' '█    ' '█    ' '█    ' '█    ' '█████')
-  local -a letter_m=('█     █' '██   ██' '█ █ █ █' '█  █  █' '█     █' '█     █' '█     █')
-  local -a letter_a=(' ███ ' '█   █' '█   █' '█████' '█   █' '█   █' '█   █')
+  local -a letter_c=(' ██████ ' '████    ' '██      ' '██      ' '██      ' '██      ' '██      ' '████    ' ' ██████ ')
+  local -a letter_l=('██      ' '██      ' '██      ' '██      ' '██      ' '██      ' '██      ' '██      ' '████████')
+  local -a letter_m=('██     ██' '███   ███' '████ ████' '██ ███ ██' '██  █  ██' '██     ██' '██     ██' '██     ██' '██     ██')
+  local -a letter_a=('  ████  ' ' ██  ██ ' '██    ██' '██    ██' '████████' '██    ██' '██    ██' '██    ██' '██    ██')
   local i
-  for i in 0 1 2 3 4 5 6; do
+  for i in 0 1 2 3 4 5 6 7 8; do
     printf '%s%s  %s  %s  %s  %s%s\n' \
       "$C_CYAN$C_BOLD" "${letter_c[i]}" "${letter_l[i]}" "${letter_m[i]}" "${letter_a[i]}" "${letter_c[i]}" "$C_RESET"
   done
