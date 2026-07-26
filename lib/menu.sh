@@ -16,10 +16,13 @@ EOF
 
 # Big block-letter "CLMAC" wordmark printed above the menu — same idea as
 # omarchy's installer TUI (a large chunky pixel-font logo over the
-# form/content). Bold double-width strokes rather than thin 1px lines, in
-# that spirit, though this is an original glyph design, not a
-# reproduction of omarchy's actual (bespoke, serif-footed) typeface — I
-# don't have that font's source, only a screenshot to eyeball.
+# form/content). Follows omarchy's specific letterform conventions as
+# closely as I can read them off a screenshot (no font source available):
+# an open bracket-shaped C, an M with a pointed zigzag valley, an A with
+# flared triangular legs, and — the detail that most sets the style apart
+# from a generic block font — small flared "feet" where each stroke meets
+# the baseline, which C/M/A (and the improvised L, not in "OMARCHY" but
+# built to match) all carry at their base.
 #
 # One static block of text, no animation. Each row prints as its own line
 # (no side-by-side column-pairing needed here, unlike the reverted
@@ -28,10 +31,10 @@ EOF
 # wrapping each line in its own color+reset anyway since that's cheap and
 # one less thing to get wrong if this ever gets reused elsewhere.
 _menu_banner() {
-  local -a letter_c=(' ██████ ' '████    ' '██      ' '██      ' '██      ' '██      ' '██      ' '████    ' ' ██████ ')
-  local -a letter_l=('██      ' '██      ' '██      ' '██      ' '██      ' '██      ' '██      ' '██      ' '████████')
-  local -a letter_m=('██     ██' '███   ███' '████ ████' '██ ███ ██' '██  █  ██' '██     ██' '██     ██' '██     ██' '██     ██')
-  local -a letter_a=('  ████  ' ' ██  ██ ' '██    ██' '██    ██' '████████' '██    ██' '██    ██' '██    ██' '██    ██')
+  local -a letter_c=('  █████ ' ' ███████' '███     ' '██      ' '██      ' '██      ' '███     ' ' ███████' '  █████ ')
+  local -a letter_l=('██      ' '██      ' '██      ' '██      ' '██      ' '██      ' '██      ' '███     ' '████████')
+  local -a letter_m=('██     ██' '███   ███' '████ ████' '██ ███ ██' '██  █  ██' '██     ██' '██     ██' '██     ██' '███   ███')
+  local -a letter_a=('  ████  ' ' ██  ██ ' '██    ██' '██    ██' '████████' '██    ██' '██    ██' '██    ██' '███  ███')
   local i
   for i in 0 1 2 3 4 5 6 7 8; do
     printf '%s%s  %s  %s  %s  %s%s\n' \
