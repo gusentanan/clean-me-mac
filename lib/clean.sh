@@ -248,14 +248,17 @@ _run_preset() {
   # Command-style preset.
   if [[ -n "${PRESET_COMMAND:-}" ]]; then
     if [[ "$CMM_DRY_RUN" -eq 1 ]]; then
-      printf '%s[dry-run]%s would run: %s\n' "$C_DIM" "$C_RESET" "$PRESET_COMMAND"
+      printf '  %s%s%s would run: %s\n' "$C_DIM" "$ICON_DRY_RUN" "$C_RESET" "$PRESET_COMMAND"
       return 0
     fi
     if ! confirm "Run '$PRESET_COMMAND'?"; then
       log_info "Skipped."
       return 0
     fi
-    eval "$PRESET_COMMAND"
+    if eval "$PRESET_COMMAND"; then
+      log_success "$PRESET_NAME done"
+      return 0
+    fi
     return $?
   fi
 
@@ -287,11 +290,14 @@ _run_preset() {
   fi
 
   for path in "${PRESET_PATHS[@]}"; do
+    [[ -e "$path" ]] || continue
+    sz=$(dir_size "$path")
     if [[ "${PRESET_EMPTY_NOT_REMOVE:-false}" == "true" ]]; then
       _empty_dir "$path"
     else
       safe_rm "$path"
     fi
+    [[ "$CMM_DRY_RUN" -eq 1 ]] || log_success "${path/#$HOME/\~} ($(human_size "$sz"))"
   done
 
   local after after_h freed
@@ -308,7 +314,7 @@ _empty_dir() {
   local d=$1
   [[ -d "$d" ]] || return 0
   if [[ "$CMM_DRY_RUN" -eq 1 ]]; then
-    printf '%s[dry-run]%s would empty %s\n' "$C_DIM" "$C_RESET" "$d"
+    printf '  %s%s%s would empty %s\n' "$C_DIM" "$ICON_DRY_RUN" "$C_RESET" "$d"
     return 0
   fi
   # Glob hidden + visible entries safely.
@@ -353,11 +359,13 @@ _run_scan_preset() {
   chosen=$(printf '%s\n' "${labelled[@]}" | select_multi "Pick $label dirs to remove")
   [[ -z "$chosen" ]] && { log_info "Nothing selected."; return 0; }
 
-  local line path expanded
+  local line path expanded sz
   while IFS= read -r line; do
     # Strip the size column (first ~10 chars + 2 spaces).
     path=$(awk '{ for (i=2; i<=NF; i++) printf "%s%s", $i, (i==NF?"":" ") }' <<< "$line")
     expanded=${path/#\~/$HOME}
+    sz=$(dir_size "$expanded")
     safe_rm "$expanded"
+    [[ "$CMM_DRY_RUN" -eq 1 ]] || log_success "$path ($(human_size "$sz"))"
   done <<< "$chosen"
 }

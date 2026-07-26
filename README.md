@@ -47,7 +47,9 @@ cd clean-me-mac
 
 | Command | What it does |
 |---|---|
+| `clmac` | Interactive launcher menu (arrow keys, in a terminal) |
 | `clmac scan` | Categorized disk usage breakdown |
+| `clmac explore` | Interactive disk usage browser — bar-chart drill-down |
 | `clmac orphans` | Find & remove leftover app data |
 | `clmac clean [preset]` | Run a known-safe cleanup preset |
 | `clmac clean --list` | List all presets with current size |
@@ -117,8 +119,14 @@ FolderName	com.example.bundleid
 ## Examples
 
 ```sh
+# Arrow-key launcher — no subcommand to remember
+clmac
+
 # What's eating my disk?
 clmac scan
+
+# Browse it interactively instead — bar-chart drill-down
+clmac explore
 
 # Find orphans, preview only
 clmac orphans --dry-run
@@ -141,9 +149,11 @@ clean-me-mac/
 ├── install.sh              symlinks into /opt/homebrew/bin
 ├── lib/
 │   ├── common.sh           colors, size helpers, confirm, safe_rm
-│   ├── ui.sh               select_multi (fzf or numbered fallback)
+│   ├── ui.sh               select_multi/select_menu (fzf or numbered fallback)
 │   ├── apps.sh             bundle ID resolution
+│   ├── menu.sh             cmd_menu — top-level interactive launcher
 │   ├── scan.sh             cmd_scan
+│   ├── explore.sh          cmd_explore — bar-chart drill-down browser
 │   ├── orphans.sh          cmd_orphans
 │   ├── clean.sh            cmd_clean + preset loader
 │   └── doctor.sh           cmd_doctor

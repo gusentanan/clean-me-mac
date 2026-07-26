@@ -29,9 +29,12 @@ _doctor_disk() {
   # Parse APFS container stats — first container only (boot disk).
   local apfs cap used free pct
   apfs=$(diskutil apfs list 2>/dev/null)
-  cap=$(awk  '/Size \(Capacity Ceiling\)/ { print $5; exit }'        <<< "$apfs")
-  used=$(awk '/Capacity In Use By Volumes/ { print $7; exit }'       <<< "$apfs")
-  free=$(awk '/Capacity Not Allocated/      { print $5; exit }'      <<< "$apfs")
+  # Grab the first digit run on the matching line (the byte count just
+  # before " B (…)") rather than a fixed field index — diskutil's column
+  # spacing shifts with label length, which silently broke fixed $N lookups.
+  cap=$(awk  '/Size \(Capacity Ceiling\)/ { match($0, /[0-9]+/); print substr($0, RSTART, RLENGTH); exit }' <<< "$apfs")
+  used=$(awk '/Capacity In Use By Volumes/ { match($0, /[0-9]+/); print substr($0, RSTART, RLENGTH); exit }' <<< "$apfs")
+  free=$(awk '/Capacity Not Allocated/     { match($0, /[0-9]+/); print substr($0, RSTART, RLENGTH); exit }' <<< "$apfs")
 
   if [[ -n "$cap" && -n "$used" ]]; then
     pct=$(awk -v u="$used" -v c="$cap" 'BEGIN { printf "%.0f", (u/c)*100 }')
@@ -41,6 +44,7 @@ _doctor_disk() {
     printf '  %-14s %s\n'      "Capacity:"     "$(human_size_c "$cap")"
     printf '  %-14s %s  %s(%s%%)%s\n' "In use:"  "$(human_size_c "$used")" "$pct_color" "$pct" "$C_RESET"
     printf '  %-14s %s\n'      "Free:"         "$(human_size_c "$free")"
+    printf '  %-14s %s %s%s%%%s\n' "" "$(render_bar "$pct" 30)" "$pct_color" "$pct" "$C_RESET"
   else
     df -h / | awk 'NR==2 { printf "  Root: %s used of %s (%s)\n", $3, $2, $5 }'
   fi

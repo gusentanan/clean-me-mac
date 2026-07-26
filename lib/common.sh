@@ -7,6 +7,7 @@
 : "${CMM_VERBOSE:=0}"
 : "${CMM_JSON:=0}"
 : "${CMM_TRASH:=0}"
+: "${CMM_MENU_QUIT:=0}"
 
 # Operation log location (macOS convention).
 CMM_LOG_DIR="$HOME/Library/Logs/clmac"
@@ -20,12 +21,30 @@ if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   C_BLUE=$'\033[34m'
   C_MAGENTA=$'\033[35m'
   C_CYAN=$'\033[36m'
+  C_PURPLE=$'\033[0;35m'
+  C_PURPLE_BOLD=$'\033[1;35m'
+  C_GRAY=$'\033[0;90m'
   C_DIM=$'\033[2m'
   C_BOLD=$'\033[1m'
   C_RESET=$'\033[0m'
 else
-  C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_MAGENTA='' C_CYAN='' C_DIM='' C_BOLD='' C_RESET=''
+  C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_MAGENTA='' C_CYAN='' \
+    C_PURPLE='' C_PURPLE_BOLD='' C_GRAY='' C_DIM='' C_BOLD='' C_RESET=''
 fi
+
+# Icons — plain glyphs, colored at the print site (mole-style: e.g.
+# "${C_GREEN}${ICON_SUCCESS}${C_RESET} msg"). Kept uncolored here so a
+# single glyph can be reused with different colors in different contexts.
+ICON_SUCCESS="✓"
+ICON_ERROR="✗"
+ICON_WARNING="⚠"
+ICON_CONFIRM="◎"
+ICON_ARROW="➤"
+ICON_LIST="•"
+ICON_SUBLIST="↳"
+ICON_DRY_RUN="→"
+ICON_SOLID="●"
+ICON_EMPTY="○"
 
 # Pick a color for a size value (in bytes). Bigger = warmer = more
 # interesting cleanup target.
@@ -57,10 +76,33 @@ human_size_padded() {
   printf '%s%*s%s' "$(size_color "$b")" "$width" "$(human_size "$b")" "$C_RESET"
 }
 
-log_info()  { [[ "$CMM_JSON" -eq 1 ]] && return 0; printf '%s\n' "$*" >&2; }
-log_warn()  { printf '%s%s%s\n' "$C_YELLOW" "$*" "$C_RESET" >&2; }
-log_error() { printf '%s%s%s\n' "$C_RED"    "$*" "$C_RESET" >&2; }
-log_debug() { [[ "$CMM_VERBOSE" -eq 1 ]] && printf '%s[debug] %s%s\n' "$C_DIM" "$*" "$C_RESET" >&2; return 0; }
+# render_bar <pct 0-100> [width=20]
+# Colored block-style progress bar (█ filled, ░ empty), mole-dashboard style.
+# Color ramps green → yellow → red+bold as pct climbs, same thresholds as
+# the disk-capacity warning colors used elsewhere (doctor, system).
+render_bar() {
+  local pct=${1:-0} width=${2:-20}
+  local filled rest bar color
+  filled=$(awk -v p="$pct" -v w="$width" \
+    'BEGIN { f = int((p * w / 100) + 0.5); if (f < 0) f = 0; if (f > w) f = w; print f }')
+  rest=$(( width - filled ))
+  color="$C_GREEN"
+  if awk -v p="$pct" 'BEGIN { exit !(p >= 85) }' </dev/null; then
+    color="$C_RED$C_BOLD"
+  elif awk -v p="$pct" 'BEGIN { exit !(p >= 60) }' </dev/null; then
+    color="$C_YELLOW"
+  fi
+  bar=""
+  (( filled > 0 )) && bar=$(printf '█%.0s' $(seq 1 "$filled"))
+  (( rest > 0 )) && bar+=$(printf '░%.0s' $(seq 1 "$rest"))
+  printf '%s%s%s' "$color" "$bar" "$C_RESET"
+}
+
+log_info()    { [[ "$CMM_JSON" -eq 1 ]] && return 0; printf '%s\n' "$*" >&2; }
+log_success() { [[ "$CMM_JSON" -eq 1 ]] && return 0; printf '  %s%s%s %s\n' "$C_GREEN" "$ICON_SUCCESS" "$C_RESET" "$*" >&2; }
+log_warn()    { printf '%s%s %s%s\n' "$C_YELLOW" "$ICON_WARNING" "$*" "$C_RESET" >&2; }
+log_error()   { printf '%s%s %s%s\n' "$C_RED" "$ICON_ERROR" "$*" "$C_RESET" >&2; }
+log_debug()   { [[ "$CMM_VERBOSE" -eq 1 ]] && printf '%s[debug] %s%s\n' "$C_DIM" "$*" "$C_RESET" >&2; return 0; }
 
 require_bash5() {
   if (( BASH_VERSINFO[0] < 5 )); then
@@ -118,9 +160,10 @@ dir_size_sum() {
 dir_size_parallel() {
   local jobs=${CMM_PARALLEL_JOBS:-$(/usr/sbin/sysctl -n hw.ncpu 2>/dev/null || echo 4)}
   (( jobs > 12 )) && jobs=12
-  # `du -sk` outputs "<kb>\t<path>", we convert kb→bytes.
+  # `du -sk` outputs "<kb>\t<path>", we convert kb→bytes. Split on tab
+  # only (not default whitespace) so paths containing spaces survive.
   xargs -0 -n1 -P "$jobs" du -sk 2>/dev/null \
-    | awk -v OFS='\t' '{ kb=$1; $1=""; sub(/^\t/,""); printf "%d\t%s\n", kb*1024, $0 }'
+    | awk -F'\t' -v OFS='\t' '{ printf "%d\t%s\n", $1*1024, $2 }'
 }
 
 # Confirm prompt. Honors --yes (CMM_YES=1). Returns 0 if yes, 1 if no.
@@ -131,7 +174,8 @@ confirm() {
     return 0
   fi
   local reply
-  printf '%s%s%s [y/N] ' "$C_BOLD" "$msg" "$C_RESET" >&2
+  printf '%s%s%s %s%s%s %s[y/N]%s ' \
+    "$C_PURPLE_BOLD" "$ICON_CONFIRM" "$C_RESET" "$C_BOLD" "$msg" "$C_RESET" "$C_DIM" "$C_RESET" >&2
   read -r reply </dev/tty
   [[ "$reply" =~ ^[Yy]$ ]]
 }
@@ -177,7 +221,7 @@ spinner_start() {
     # Hide cursor.
     printf '\033[?25l' >&2
     while :; do
-      printf '\r  %s%s %s...%s\033[K' "$C_DIM" "${frames[i]}" "$pick" "$C_RESET" >&2
+      printf '\r  %s%s%s %s%s...%s\033[K' "$C_CYAN" "${frames[i]}" "$C_RESET" "$C_DIM" "$pick" "$C_RESET" >&2
       i=$(( (i + 1) % n ))
       sleep 0.08
     done
@@ -186,13 +230,22 @@ spinner_start() {
   disown "$CMM_SPINNER_PID" 2>/dev/null || true
 }
 
+# spinner_stop [completion-message]
+# With no argument: clears the spinner line silently (caller prints its own
+# output next, e.g. a table). With an argument: clears the spinner line and
+# replaces it with a "✓ message" line, mole-style real-time completion
+# feedback.
 spinner_stop() {
-  [[ -z "${CMM_SPINNER_PID:-}" ]] && return 0
-  kill "$CMM_SPINNER_PID" 2>/dev/null
-  wait "$CMM_SPINNER_PID" 2>/dev/null
-  # Clear line and restore cursor.
-  printf '\r\033[K\033[?25h' >&2
-  CMM_SPINNER_PID=""
+  local done_msg=${1:-}
+  if [[ -n "${CMM_SPINNER_PID:-}" ]]; then
+    kill "$CMM_SPINNER_PID" 2>/dev/null
+    wait "$CMM_SPINNER_PID" 2>/dev/null
+    # Clear line and restore cursor.
+    printf '\r\033[K\033[?25h' >&2
+    CMM_SPINNER_PID=""
+  fi
+  [[ -n "$done_msg" ]] && log_success "$done_msg"
+  return 0
 }
 
 # Run a command with a spinner. The command's stdout is captured and
@@ -256,9 +309,9 @@ safe_rm() {
 
   if [[ "$CMM_DRY_RUN" -eq 1 ]]; then
     if [[ "$CMM_TRASH" -eq 1 ]]; then
-      printf '%s[dry-run]%s would trash %s\n' "$C_DIM" "$C_RESET" "$path" >&2
+      printf '  %s%s%s would trash %s\n' "$C_DIM" "$ICON_DRY_RUN" "$C_RESET" "$path" >&2
     else
-      printf '%s[dry-run]%s would remove %s\n' "$C_DIM" "$C_RESET" "$path" >&2
+      printf '  %s%s%s would remove %s\n' "$C_DIM" "$ICON_DRY_RUN" "$C_RESET" "$path" >&2
     fi
     return 0
   fi

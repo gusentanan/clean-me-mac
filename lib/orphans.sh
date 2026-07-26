@@ -206,6 +206,7 @@ cmd_orphans() {
     [[ -e "$expanded" ]] || continue
     sz=$(dir_size "$expanded")
     _orphan_safe_delete "$expanded"
+    [[ "$CMM_DRY_RUN" -eq 1 ]] || log_success "$path_only ($(human_size "$sz"))"
     total_freed=$(( total_freed + sz ))
   done <<< "$chosen"
 

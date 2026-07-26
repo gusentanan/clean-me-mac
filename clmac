@@ -45,10 +45,13 @@ ${C_BOLD}USAGE${C_RESET}
 
 ${C_BOLD}COMMANDS${C_RESET}
   ${C_GREEN}scan${C_RESET}              Categorized disk usage breakdown (\$HOME paths)
+  ${C_GREEN}explore${C_RESET}           Interactive disk usage browser (bar-chart drill-down)
   ${C_GREEN}system${C_RESET}            Explain "System Data" gap — snapshots, swap, iOS backups
   ${C_GREEN}orphans${C_RESET}           Find & remove leftover app data
   ${C_GREEN}clean${C_RESET} [preset]    Run a known-safe cleanup preset
   ${C_GREEN}doctor${C_RESET}            One-screen health summary
+
+  Running ${C_CYAN}clmac${C_RESET} with no command in a terminal opens an interactive menu.
 
 ${C_BOLD}GLOBAL OPTIONS${C_RESET}
   -n, --dry-run     Preview without deleting
@@ -60,7 +63,9 @@ ${C_BOLD}GLOBAL OPTIONS${C_RESET}
       --version     Print version
 
 ${C_BOLD}EXAMPLES${C_RESET}
+  clmac
   clmac scan
+  clmac explore
   clmac clean --list
   clmac clean huggingface
   clmac orphans --dry-run
@@ -117,6 +122,13 @@ main() {
     if [[ "$CMM_HELP" -eq 1 ]]; then
       usage; exit 0
     fi
+    # Interactive launcher when run bare in a terminal. Guarded on -t 1 so
+    # scripts/CI piping `clmac` with no args keep today's usage/exit-2.
+    if [[ -t 1 && "$CMM_JSON" -ne 1 ]]; then
+      source "$CMM_LIB/menu.sh"
+      cmd_menu
+      exit $?
+    fi
     usage >&2; exit 2
   fi
 
@@ -124,6 +136,10 @@ main() {
     scan)
       source "$CMM_LIB/scan.sh"
       cmd_scan "${rest[@]}"
+      ;;
+    explore)
+      source "$CMM_LIB/explore.sh"
+      cmd_explore "${rest[@]}"
       ;;
     system)
       source "$CMM_LIB/system.sh"

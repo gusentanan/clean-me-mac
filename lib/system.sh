@@ -41,9 +41,11 @@ _system_disk_gap() {
 
   local apfs cap_bytes used_bytes free_bytes
   apfs=$(diskutil apfs list 2>/dev/null)
-  cap_bytes=$(awk  '/Size \(Capacity Ceiling\)/ { print $5; exit }' <<< "$apfs")
-  used_bytes=$(awk '/Capacity In Use By Volumes/ { print $7; exit }' <<< "$apfs")
-  free_bytes=$(awk '/Capacity Not Allocated/     { print $5; exit }' <<< "$apfs")
+  # See doctor.sh: match the first digit run rather than a fixed field
+  # index, since diskutil's column spacing shifts with label length.
+  cap_bytes=$(awk  '/Size \(Capacity Ceiling\)/ { match($0, /[0-9]+/); print substr($0, RSTART, RLENGTH); exit }' <<< "$apfs")
+  used_bytes=$(awk '/Capacity In Use By Volumes/ { match($0, /[0-9]+/); print substr($0, RSTART, RLENGTH); exit }' <<< "$apfs")
+  free_bytes=$(awk '/Capacity Not Allocated/     { match($0, /[0-9]+/); print substr($0, RSTART, RLENGTH); exit }' <<< "$apfs")
 
   if [[ -n "$used_bytes" ]]; then
     printf '  %-16s %s\n' "Capacity:"  "$(human_size_c "$cap_bytes")"
@@ -70,7 +72,7 @@ _system_snapshots() {
   done < <(tmutil listlocalsnapshots / 2>/dev/null)
 
   if (( ${#snaps[@]} == 0 )); then
-    printf ' — %snone%s\n' "$C_GREEN" "$C_RESET"
+    printf ' — %s%s none%s\n' "$C_GREEN" "$ICON_SUCCESS" "$C_RESET"
     return
   fi
 
@@ -89,7 +91,7 @@ _system_ios_backups() {
   printf '%s%siOS / iPad Backups%s' "$C_BOLD" "$C_BLUE" "$C_RESET"
 
   if [[ ! -d "$backup_dir" ]]; then
-    printf ' — %snone%s\n' "$C_GREEN" "$C_RESET"
+    printf ' — %s%s none%s\n' "$C_GREEN" "$ICON_SUCCESS" "$C_RESET"
     return
   fi
 
@@ -99,7 +101,7 @@ _system_ios_backups() {
   spinner_stop
 
   if (( sz == 0 )); then
-    printf ' — %snone%s\n' "$C_GREEN" "$C_RESET"
+    printf ' — %s%s none%s\n' "$C_GREEN" "$ICON_SUCCESS" "$C_RESET"
     return
   fi
 
@@ -121,7 +123,7 @@ _system_vm() {
   local vm_dir="/private/var/vm"
 
   if [[ ! -d "$vm_dir" ]]; then
-    printf ' — %snot present%s\n' "$C_GREEN" "$C_RESET"
+    printf ' — %s%s not present%s\n' "$C_GREEN" "$ICON_SUCCESS" "$C_RESET"
     return
   fi
 
@@ -146,7 +148,7 @@ _system_apps() {
   printf '%s%s/Applications%s' "$C_BOLD" "$C_BLUE" "$C_RESET"
 
   if [[ ! -d /Applications ]]; then
-    printf ' — %snot present%s\n' "$C_GREEN" "$C_RESET"
+    printf ' — %s%s not present%s\n' "$C_GREEN" "$ICON_SUCCESS" "$C_RESET"
     return
   fi
 
