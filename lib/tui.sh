@@ -286,14 +286,19 @@ tui_select_menu() {
 
   _tui_arm_traps
   tui_enter_alt; tui_raw_on; tui_hide_cursor
-  tui_clear_screen
 
   local rc=130 result=""
   while true; do
     (( cursor < top )) && top=$cursor
     (( cursor >= top + page_size )) && top=$(( cursor - page_size + 1 ))
 
-    printf '\033[H\033[J' >&2
+    # tui_clear_screen (not a lighter \033[H\033[J) on EVERY redraw, not
+    # just the first: this loop redraws on every arrow-key press, and the
+    # lighter erase-to-end-of-screen doesn't touch a terminal's own
+    # alt-screen scrollback the way \033[3J does — leaving it out here
+    # meant every keystroke left the previous frame sitting in scrollback,
+    # so scrolling up while navigating showed a trail of past frames.
+    tui_clear_screen
     if (( banner_active )); then
       local bline
       for bline in "${banner_lines[@]}"; do
@@ -366,14 +371,17 @@ tui_select_multi() {
 
   _tui_arm_traps
   tui_enter_alt; tui_raw_on; tui_hide_cursor
-  tui_clear_screen
 
   local rc=1
   while true; do
     (( cursor < top )) && top=$cursor
     (( cursor >= top + page_size )) && top=$(( cursor - page_size + 1 ))
 
-    printf '\033[H\033[J' >&2
+    # See tui_select_menu: tui_clear_screen (not a lighter \033[H\033[J)
+    # on EVERY redraw, not just the first — this loop redraws on every
+    # arrow-key/space press, and leaving scrollback un-purged each time
+    # left a trail of past frames visible when scrolling up mid-navigation.
+    tui_clear_screen
     printf '  %s%s%s\n' "$C_BOLD" "$header" "$C_RESET" >&2
     printf '  %s%s%s\n\n' "$C_DIM" "$(_tui_divider "$header" "$cols")" "$C_RESET" >&2
 
