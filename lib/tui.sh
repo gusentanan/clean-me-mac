@@ -154,26 +154,41 @@ _tui_disarm_traps() {
 # Key decoding
 # ---------------------------------------------------------------------------
 
-# read_key [fd]
+# read_key [fd] [timeout]
 # Decodes one keypress into a symbolic name: UP DOWN LEFT RIGHT ENTER SPACE
-# BACKSPACE QUIT TOP BOTTOM CHAR:<c> OTHER.
+# BACKSPACE QUIT TOP BOTTOM TICK CHAR:<c> OTHER.
 #
-# With no argument, opens /dev/tty for the read — the pickers below always
-# run at the end of an `items | tui_select_*` pipe, so fd 0 is bound to
-# already-consumed pipe data, not the terminal (same reasoning as the
-# pure-bash fallbacks in lib/ui.sh, which read from /dev/tty directly for
-# the same reason). Pass an explicit fd number (e.g. `read_key 0`) to feed
-# scripted byte sequences for testing.
+# With no fd argument, opens /dev/tty for the read — the pickers below
+# always run at the end of an `items | tui_select_*` pipe, so fd 0 is
+# bound to already-consumed pipe data, not the terminal (same reasoning as
+# the pure-bash fallbacks in lib/ui.sh, which read from /dev/tty directly
+# for the same reason). Pass an explicit fd number (e.g. `read_key 0`) to
+# feed scripted byte sequences for testing.
+#
+# With a timeout given, a wait that expires with no key pressed returns
+# TICK rather than QUIT (`read -t` exits >128 on a real timeout vs. 1 on
+# genuine EOF/closed-fd, so the two are distinguishable) — this is what
+# lets a picker redraw on a timer (e.g. to animate something) without
+# treating "no input yet" as if the user asked to quit.
 read_key() {
-  local fd=${1:-} opened=0
+  local fd=${1:-} timeout=${2:-} opened=0
   if [[ -z "$fd" ]]; then
     exec {fd}</dev/tty || { printf 'QUIT\n'; return 0; }
     opened=1
   fi
 
   local key rc
-  IFS= read -r -s -n 1 -u "$fd" key
+  if [[ -n "$timeout" ]]; then
+    IFS= read -r -s -n 1 -t "$timeout" -u "$fd" key
+  else
+    IFS= read -r -s -n 1 -u "$fd" key
+  fi
   rc=$?
+  if (( rc > 128 )); then
+    (( opened )) && exec {fd}<&-
+    printf 'TICK\n'
+    return 0
+  fi
   if (( rc != 0 )); then
     (( opened )) && exec {fd}<&-
     printf 'QUIT\n'
@@ -236,6 +251,31 @@ read_key() {
   printf '%s\n' "$out"
 }
 
+# _tui_render_with_art <gap> <art_width> <content_lines_var> <art_lines_var>
+# Prints "<art line, padded to art_width><gap spaces><content line>" for
+# every row up to the taller of the two inputs, blank-padding whichever
+# side runs out first. Factored out of tui_select_menu's draw loop (used
+# for the top-level menu's mascot) specifically so this line-pairing math
+# — the part most likely to have an off-by-one — can be unit-tested with
+# piped-in arrays instead of needing a real terminal to eyeball.
+_tui_render_with_art() {
+  local gap=$1 art_width=$2 content_var=$3 art_var=$4
+  local -n _tra_content=$content_var
+  local -n _tra_art=$art_var
+  local n_content=${#_tra_content[@]} n_art=${#_tra_art[@]}
+  local max=$n_content
+  (( n_art > max )) && max=$n_art
+  local i gap_str
+  gap_str=$(printf '%*s' "$gap" '')
+  for (( i = 0; i < max; i++ )); do
+    local art_line=${_tra_art[i]:-} art_w fill
+    art_w=$(tui_visible_width "$art_line")
+    fill=$(( art_width - art_w ))
+    (( fill < 0 )) && fill=0
+    printf '%s%*s%s%s\n' "$art_line" "$fill" '' "$gap_str" "${_tra_content[i]:-}" >&2
+  done
+}
+
 # ---------------------------------------------------------------------------
 # Pickers
 # ---------------------------------------------------------------------------
@@ -255,8 +295,15 @@ _tui_divider() {
 # signature but unused — there's no box to label anymore).
 # Prints the chosen payload on stdout. Sets CMM_MENU_QUIT=1 and returns 130
 # on quit (q / Esc / Ctrl-C); returns 1 on an empty item list.
+# tui_select_menu <header> <footer> <label> <items> [art_frames_var]
+# art_frames_var, if given, names an array whose elements are complete
+# multi-line ASCII-art frames (one element per animation frame) drawn to
+# the left of the list, cycled on a timer. Only menu.sh's top-level menu
+# passes this — every other caller (clean/orphans pickers) is unaffected,
+# and it's skipped automatically on a terminal too narrow to fit both
+# columns.
 tui_select_menu() {
-  local header=$1 footer=$2 _label=${3:-} items=$4
+  local header=$1 footer=$2 _label=${3:-} items=$4 art_var=${5:-}
   local -a tui_labels=() tui_payloads=()
   local disp payload
   while IFS=$'\t' read -r disp payload; do
@@ -273,6 +320,29 @@ tui_select_menu() {
   (( page_size < 1 )) && page_size=1
   (( page_size > n )) && page_size=$n
 
+  # Art setup: only enabled when a frames array was passed AND the
+  # terminal is wide enough for both columns plus a gap. art_width is the
+  # widest line across ALL frames (not just the current one) so the
+  # content column doesn't shift left/right as frames cycle.
+  local -a art_frames=()
+  [[ -n "$art_var" ]] && { local -n _tsm_frames_ref=$art_var; art_frames=("${_tsm_frames_ref[@]}"); }
+  local art_gap=3 art_width=0 art_frame_idx=0
+  if (( ${#art_frames[@]} > 0 )); then
+    local -a _probe_lines
+    local frame al w
+    for frame in "${art_frames[@]}"; do
+      mapfile -t _probe_lines <<< "$frame"
+      for al in "${_probe_lines[@]}"; do
+        w=$(tui_visible_width "$al")
+        (( w > art_width )) && art_width=$w
+      done
+    done
+  fi
+  local art_active=0
+  (( ${#art_frames[@]} > 0 && cols >= art_width + art_gap + 60 )) && art_active=1
+  local tick_timeout=""
+  (( art_active )) && tick_timeout=0.2
+
   _tui_arm_traps
   tui_enter_alt; tui_raw_on; tui_hide_cursor
   tui_clear_screen
@@ -282,25 +352,40 @@ tui_select_menu() {
     (( cursor < top )) && top=$cursor
     (( cursor >= top + page_size )) && top=$(( cursor - page_size + 1 ))
 
-    printf '\033[H\033[J' >&2
-    printf '  %s%s%s\n' "$C_BOLD" "$header" "$C_RESET" >&2
-    printf '  %s%s%s\n\n' "$C_DIM" "$(_tui_divider "$header" "$cols")" "$C_RESET" >&2
+    local -a content_lines=()
+    content_lines+=("$(printf '%s%s%s' "$C_BOLD" "$header" "$C_RESET")")
+    content_lines+=("$(printf '%s%s%s' "$C_DIM" "$(_tui_divider "$header" "$cols")" "$C_RESET")")
+    content_lines+=("")
 
     local i last=$(( top + page_size - 1 ))
     (( last >= n )) && last=$(( n - 1 ))
     for (( i = top; i <= last; i++ )); do
       if (( i == cursor )); then
-        printf '  %s▶%s %s\n' "$C_CYAN$C_BOLD" "$C_RESET" "${tui_labels[i]}" >&2
+        content_lines+=("$(printf '%s▶%s %s' "$C_CYAN$C_BOLD" "$C_RESET" "${tui_labels[i]}")")
       else
-        printf '    %s\n' "${tui_labels[i]}" >&2
+        content_lines+=("$(printf '  %s' "${tui_labels[i]}")")
       fi
     done
 
-    printf '\n  %s%s%s\n' "$C_DIM" "$footer" "$C_RESET" >&2
+    content_lines+=("")
+    content_lines+=("$(printf '%s%s%s' "$C_DIM" "$footer" "$C_RESET")")
+
+    printf '\033[H\033[J' >&2
+    if (( art_active )); then
+      local -a art_lines
+      mapfile -t art_lines <<< "${art_frames[art_frame_idx]}"
+      _tui_render_with_art "$art_gap" "$art_width" content_lines art_lines
+    else
+      local line
+      for line in "${content_lines[@]}"; do
+        printf '  %s\n' "$line" >&2
+      done
+    fi
 
     local key
-    key=$(read_key)
+    key=$(read_key "" "$tick_timeout")
     case "$key" in
+      TICK) (( art_active )) && art_frame_idx=$(( (art_frame_idx + 1) % ${#art_frames[@]} )) ;;
       UP) (( cursor > 0 )) && cursor=$(( cursor - 1 )) ;;
       DOWN) (( cursor < n - 1 )) && cursor=$(( cursor + 1 )) ;;
       TOP) cursor=0 ;;

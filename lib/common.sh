@@ -24,12 +24,13 @@ if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   C_PURPLE=$'\033[0;35m'
   C_PURPLE_BOLD=$'\033[1;35m'
   C_GRAY=$'\033[0;90m'
+  C_ORANGE=$'\033[38;5;208m'
   C_DIM=$'\033[2m'
   C_BOLD=$'\033[1m'
   C_RESET=$'\033[0m'
 else
   C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_MAGENTA='' C_CYAN='' \
-    C_PURPLE='' C_PURPLE_BOLD='' C_GRAY='' C_DIM='' C_BOLD='' C_RESET=''
+    C_PURPLE='' C_PURPLE_BOLD='' C_GRAY='' C_ORANGE='' C_DIM='' C_BOLD='' C_RESET=''
 fi
 
 # Icons — plain glyphs, colored at the print site (mole-style: e.g.
