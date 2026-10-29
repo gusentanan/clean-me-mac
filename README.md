@@ -47,6 +47,7 @@ cd clean-me-mac
 | `clmac` | Interactive launcher menu (arrow keys, in a terminal) |
 | `clmac scan` | Categorized disk usage breakdown |
 | `clmac explore` | Interactive disk usage browser — bar-chart drill-down |
+| `clmac system` | Explain the "System Data" gap — snapshots, swap, iOS backups, simulator runtimes |
 | `clmac orphans` | Find & remove leftover app data |
 | `clmac clean [preset]` | Run a known-safe cleanup preset |
 | `clmac clean --list` | List all presets with current size |
@@ -81,6 +82,11 @@ removed.
 | `xcode-derived` | ✅ | Xcode DerivedData |
 | `xcode-archives` | ⚠️ | Xcode build archives — do not delete if needed for App Store |
 | `xcode-device-support` | ✅ | iOS device symbols (redownloaded on connect) |
+| `flutter-build` | ⚠️ | Interactively pick Flutter/Dart `build/` and `.dart_tool` dirs (only next to a `pubspec.yaml`) |
+| `simulators` | ⚠️ | Interactively delete iOS simulator devices (also removes unavailable ones) |
+| `simulator-erase` | ⚠️ | Interactively reset simulators to factory state — keeps the device, drops its data |
+| `simulator-runtimes` | ⚠️ | Interactively remove iOS simulator runtimes (~7–8G each; re-downloadable from Xcode) |
+| `unzip-extracts` | ⚠️ | Extracted archives stored in the UnzipAnyFile app container |
 | `android-studio` | ✅ | Android Studio caches & logs across all installed versions |
 | `vscode-cache` | ✅ | VS Code caches, logs, GPU/code caches |
 | `chrome-cache` | ✅ | Chrome cache directories |
@@ -158,6 +164,7 @@ clean-me-mac/
 │   ├── explore.sh          cmd_explore — execs the Go analyzer, or a bash bar-chart fallback
 │   ├── orphans.sh          cmd_orphans
 │   ├── clean.sh            cmd_clean + preset loader
+│   ├── simulators.sh       simulator device/runtime pickers behind the simulator presets
 │   └── doctor.sh           cmd_doctor
 └── presets/                one file per preset
 ```

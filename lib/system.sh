@@ -30,9 +30,13 @@ cmd_system() {
   printf '\n'
   _system_apps
   printf '\n'
+  _system_dev_assets
+  printf '\n'
   printf '%s%sNext steps%s\n' "$C_BOLD" "$C_BLUE" "$C_RESET"
   printf '  clmac clean apfs-snapshots  %s# reclaim snapshot space%s\n' "$C_DIM" "$C_RESET"
   printf '  clmac clean ios-backups     %s# remove local device backups%s\n' "$C_DIM" "$C_RESET"
+  printf '  clmac clean simulator-runtimes %s# remove iOS simulator runtimes%s\n' "$C_DIM" "$C_RESET"
+  printf '  clmac clean simulators      %s# delete / reset simulator devices%s\n' "$C_DIM" "$C_RESET"
   printf '  clmac orphans               %s# find leftover app data%s\n\n' "$C_DIM" "$C_RESET"
 }
 
@@ -168,13 +172,57 @@ _system_apps() {
   printf '  %sclmac orphans%s  to find leftover data from uninstalled apps\n' "$C_CYAN" "$C_RESET"
 }
 
+# Xcode simulator runtimes and other macOS-managed downloads live in
+# /System/Library/AssetsV2, outside $HOME. They are the usual reason
+# "System Data" outgrows everything clmac scan can see.
+_system_dev_assets() {
+  local assets=/System/Library/AssetsV2
+  printf '%s%sDeveloper assets%s' "$C_BOLD" "$C_BLUE" "$C_RESET"
+
+  if [[ ! -d "$assets" ]]; then
+    printf ' — %s%s not present%s\n' "$C_GREEN" "$ICON_SUCCESS" "$C_RESET"
+    return
+  fi
+
+  spinner_start "sizing $assets"
+  local total rows
+  total=$(dir_size "$assets")
+  rows=$(find "$assets" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | dir_size_parallel | sort -nr | head -5)
+  spinner_stop
+
+  printf ' — %s %s(managed by macOS)%s\n' "$(human_size_c "$total")" "$C_DIM" "$C_RESET"
+  local bytes path
+  while IFS=$'\t' read -r bytes path; do
+    [[ -z "$path" ]] && continue
+    printf '  %s  %s%s%s\n' "$(human_size_padded "$bytes" 10)" "$C_DIM" "$(basename "$path" | sed 's/^com_apple_MobileAsset_//')" "$C_RESET"
+  done <<< "$rows"
+
+  if xcrun --find simctl >/dev/null 2>&1; then
+    local rt_lines
+    rt_lines=$(xcrun simctl runtime list -j 2>/dev/null | jq -r '
+      .[] | [.sizeBytes, (.runtimeIdentifier | sub("com.apple.CoreSimulator.SimRuntime."; "") | sub("-"; " ") | gsub("-"; "."))] | @tsv' | sort -nr)
+    if [[ -n "$rt_lines" ]]; then
+      printf '  %sSimulator runtimes:%s\n' "$C_DIM" "$C_RESET"
+      while IFS=$'\t' read -r bytes path; do
+        printf '  %s  %s\n' "$(human_size_padded "$bytes" 10)" "$path"
+      done <<< "$rt_lines"
+    fi
+    local dev_bytes
+    dev_bytes=$(dir_size "$HOME/Library/Developer/CoreSimulator/Devices")
+    printf '  %s  %sSimulator devices (~/Library/Developer/CoreSimulator)%s\n' "$(human_size_padded "$dev_bytes" 10)" "$C_DIM" "$C_RESET"
+  fi
+  printf '  %sTip: runtimes are also mounted under /private/var/run/.../cryptexd, so%s\n' "$C_DIM" "$C_RESET"
+  printf '  %sa plain `du /private` counts them twice — use `du -x` or this report.%s\n' "$C_DIM" "$C_RESET"
+}
+
 _system_help() {
   cat <<EOF
 ${C_BOLD}clmac system${C_RESET} — explain the gap between macOS Storage and clmac scan
 
   macOS Storage shows "System Data" and "macOS" as separate buckets
   that clmac scan cannot see (they live outside \$HOME). This command
-  breaks them down: APFS snapshots, iOS backups, swap, /Applications.
+  breaks them down: APFS snapshots, iOS backups, swap, /Applications,
+  and developer assets (simulator runtimes and other macOS downloads).
 
   ${C_BOLD}USAGE${C_RESET}
     clmac system
@@ -182,6 +230,7 @@ ${C_BOLD}clmac system${C_RESET} — explain the gap between macOS Storage and cl
   ${C_BOLD}SEE ALSO${C_RESET}
     clmac clean apfs-snapshots   delete local Time Machine snapshots
     clmac clean ios-backups      remove local iPhone/iPad backups
+    clmac clean simulator-runtimes  remove iOS simulator runtimes
     clmac scan                   full \$HOME breakdown
 EOF
 }
