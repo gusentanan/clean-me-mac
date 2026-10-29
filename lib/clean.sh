@@ -1,11 +1,21 @@
 #!/opt/homebrew/bin/bash
 # cmd_clean — run known-safe cleanup presets.
 
+# shellcheck source=lib/simulators.sh
+source "$CMM_LIB/simulators.sh"
+
 # Source a preset file in a subshell-safe way. The preset must set
 # PRESET_NAME, PRESET_DESC, PRESET_SAFE and one of:
 #   - PRESET_PATHS (array)              standard path-removal preset
 #   - PRESET_COMMAND (string)           runs a shell command
 #   - PRESET_SCAN=true + PRESET_SCAN_* dynamic scan preset
+#
+# Optional keys:
+#   PRESET_SCAN_REQUIRE_SIBLING   scan presets only: match a dir only when this
+#                                 file/dir exists next to it (e.g. pubspec.yaml)
+#   PRESET_SIZE_PATHS (array)     paths summed for the size of a command preset
+#   PRESET_INTERACTIVE=true       command preset that prompts for itself, so
+#                                 clean skips its own confirm/dry-run gate
 #
 # Glob patterns in PRESET_PATHS (e.g. `AndroidStudio*`) are expanded
 # at load time using find, which handles spaces and missing parents.
@@ -13,9 +23,11 @@
 # Sourcing into the caller's scope — clear vars first to avoid leaks.
 _load_preset() {
   local file=$1
-  unset PRESET_NAME PRESET_DESC PRESET_SAFE PRESET_COMMAND
+  unset PRESET_NAME PRESET_DESC PRESET_SAFE PRESET_COMMAND PRESET_INTERACTIVE
   unset PRESET_SCAN PRESET_SCAN_NAME PRESET_EMPTY_NOT_REMOVE PRESET_SCAN_MIN_AGE_DAYS
+  unset PRESET_SCAN_REQUIRE_SIBLING
   PRESET_PATHS=()
+  PRESET_SIZE_PATHS=()
   PRESET_SCAN_ROOTS=()
   PRESET_SCAN_NAMES=()
   # shellcheck disable=SC1090
@@ -41,6 +53,35 @@ _scan_find_by_names() {
   else
     find "$root" -type d -name "$PRESET_SCAN_NAME" -prune -print0 2>/dev/null
   fi
+}
+
+# Existing PRESET_SCAN_ROOTS, one per line, each directory once. On a
+# case-insensitive APFS volume ~/projects and ~/Projects are the same
+# directory, so listing both would double every match and its size.
+_scan_roots() {
+  local root inode
+  local -A seen=()
+  for root in "${PRESET_SCAN_ROOTS[@]}"; do
+    [[ -d "$root" ]] || continue
+    inode=$(stat -f '%d:%i' "$root" 2>/dev/null)
+    [[ -n "$inode" && -n "${seen[$inode]:-}" ]] && continue
+    seen[$inode]=1
+    printf '%s\n' "$root"
+  done
+}
+
+# Like _scan_find_by_names, but drops matches that lack the preset's
+# PRESET_SCAN_REQUIRE_SIBLING marker (so a generic name like "build" only
+# matches inside real projects). Same NUL-terminated output.
+_scan_matches() {
+  local root=$1 d
+  while IFS= read -r -d '' d; do
+    if [[ -n "${PRESET_SCAN_REQUIRE_SIBLING:-}" \
+          && ! -e "$(dirname "$d")/$PRESET_SCAN_REQUIRE_SIBLING" ]]; then
+      continue
+    fi
+    printf '%s\0' "$d"
+  done < <(_scan_find_by_names "$root")
 }
 
 # Human-readable label for scan names (used in UI prompts).
@@ -95,19 +136,18 @@ _find_preset() {
 # Echo current size of a preset (in bytes).
 _preset_current_size() {
   if [[ -n "${PRESET_COMMAND:-}" ]]; then
-    echo 0
+    dir_size_sum "${PRESET_SIZE_PATHS[@]}"
     return
   fi
   if [[ "${PRESET_SCAN:-false}" == "true" ]]; then
     local total=0 root
-    for root in "${PRESET_SCAN_ROOTS[@]}"; do
-      [[ -d "$root" ]] || continue
+    while IFS= read -r root; do
       while IFS= read -r -d '' d; do
         local s
         s=$(dir_size "$d")
         total=$(( total + s ))
-      done < <(_scan_find_by_names "$root")
-    done
+      done < <(_scan_matches "$root")
+    done < <(_scan_roots)
     echo "$total"
     return
   fi
@@ -253,6 +293,11 @@ _run_preset() {
 
   # Command-style preset.
   if [[ -n "${PRESET_COMMAND:-}" ]]; then
+    # Interactive presets prompt (and honor --dry-run) themselves.
+    if [[ "${PRESET_INTERACTIVE:-false}" == "true" ]]; then
+      eval "$PRESET_COMMAND"
+      return $?
+    fi
     if [[ "$CMM_DRY_RUN" -eq 1 ]]; then
       printf '  %s%s%s would run: %s\n' "$C_DIM" "$ICON_DRY_RUN" "$C_RESET" "$PRESET_COMMAND"
       return 0
@@ -337,8 +382,7 @@ _run_scan_preset() {
   local -a found=()
   local label
   label=$(_scan_names_label)
-  for root in "${PRESET_SCAN_ROOTS[@]}"; do
-    [[ -d "$root" ]] || continue
+  while IFS= read -r root; do
     while IFS= read -r -d '' d; do
       if [[ -n "${PRESET_SCAN_MIN_AGE_DAYS:-}" ]]; then
         if find "$d" -maxdepth 0 -mtime -"${PRESET_SCAN_MIN_AGE_DAYS}" -print -quit | grep -q .; then
@@ -346,8 +390,8 @@ _run_scan_preset() {
         fi
       fi
       found+=("$d")
-    done < <(_scan_find_by_names "$root")
-  done
+    done < <(_scan_matches "$root")
+  done < <(_scan_roots)
 
   if (( ${#found[@]} == 0 )); then
     log_info "  No $label directories found (older than ${PRESET_SCAN_MIN_AGE_DAYS:-0} days)."
